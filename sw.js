@@ -2,7 +2,7 @@
 var CACHE = 'modian-2d6b9b32af';
 var FILES = ["./", "core.js", "data.js", "engine.js", "games.js", "games2.js", "hanzi-writer.min.js", "icons/apple-touch-icon.png", "icons/icon-192.png", "icons/icon-512.png", "index.html", "licenses.js", "licenses/ARPHICPL.TXT", "licenses/HANZI-WRITER-LICENSE-MIT.txt", "manifest.webmanifest", "play.css", "qrun.js", "quiz.js", "review.js", "strokes.js", "style.css", "views.js"];
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES.map(function (f) { return new Request(f, { cache: 'reload' }); })); }).then(function () { return self.skipWaiting(); }));
 });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) {
