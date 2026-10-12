@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>墨点识字</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#FFF7E8">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="墨点识字">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <main id="stage" aria-live="polite"></main>
+  <div id="toast" role="status"></div>
+  <div id="modal" role="dialog" aria-modal="true"></div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <div id="rotate" aria-hidden="true">
+    <svg viewBox="0 0 120 90" width="160" height="120"><rect x="14" y="22" width="92" height="52" rx="10" fill="none" stroke="#2A2748" stroke-width="6"/><circle cx="98" cy="48" r="3.5" fill="#2A2748"/><path d="M60 8c14 0 24 8 26 18" stroke="#FF7A59" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M78 24l9 3 2-10" stroke="#FF7A59" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <b>请把 iPad 横过来用</b>
+    <span>墨点识字需要横屏哦</span>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="strokes.js"></script>
+<script src="hanzi-writer.min.js"></script>
+<script src="licenses.js"></script>
+<script src="core.js"></script>
+<script src="quiz.js"></script>
+<script src="views.js"></script>
+<script>
+  // 禁止双指缩放、双击放大（iPad 上防止误触）
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (n) {
+    document.addEventListener(n, function (e) { e.preventDefault(); }, { passive: false });
+  });
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  window.addEventListener('error', function (e) { try { console.log('[墨点识字] 出错：' + (e && e.message)); } catch (x) { /* ignore */ } });
+  MZ.start();
+  // 离线缓存：只在网址是 http(s) 时注册；失败了也不影响使用
+  try {
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* ignore */ }); });
+    }
+  } catch (e) { /* ignore */ }
+  // 在 Safari 里（还没装到桌面）第一次打开时，提示一次怎么装
+  try {
+    if (navigator.standalone === false && !localStorage.getItem('modian.tip1')) {
+      setTimeout(function () {
+        MZ.modal({
+          title: '装到 iPad 桌面',
+          body: '点浏览器上方的“分享”图标（方框带向上的箭头），再选“添加到主屏幕”。以后就能像 App 一样直接打开，没有网络也能用。',
+          buttons: [{ label: '知道了', kind: 'coral', onClick: function () { try { localStorage.setItem('modian.tip1', '1'); } catch (e2) { /* ignore */ } } }]
+        });
+      }, 1200);
+    }
+  } catch (e) { /* ignore */ }
+</script>
+</body>
+</html>
