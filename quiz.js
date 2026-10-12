@@ -1,39 +1,71 @@
-/* 墨点识字 · 闯关：关卡定义与出题 */
+/* 墨点识字 · 闯关：关卡定义与出题（小游戏和“叫醒字宝宝”也复用这里的题型） */
 (function () {
   'use strict';
   var MZ = window.MZ, D = MZ.D, S = MZ.S;
   var shuffle = MZ.shuffle, pick = MZ.pick;
 
-  /* ---------- 关卡 ---------- */
+  /* ---------- 关卡 ----------
+     book：0~6 是各册的识字关；'sp' 是特别关。prev：要先通过的那一关（没有就是一开始就能玩）。
+     前 15 关的编号、名字和内容都和第一版一样，老存档里的星星不会乱。 */
   var G = function (names) {
-    return names.map(function (n) {
-      for (var i = 0; i < D.groups.length; i++) if (D.groups[i].name === n) return i;
-      throw new Error('找不到分组 ' + n);
+    var out = [];
+    names.forEach(function (n) {
+      var found = false;
+      for (var i = 0; i < D.groups.length; i++) if (D.groups[i].name === n) { out.push(i); found = true; break; }
+      if (!found && window.console) console.log('[墨点识字] 找不到分组 ' + n);
     });
+    return out;
   };
-  MZ.LEVELS = [
-    { id: 1, name: '数字岛', kind: 'chars', groups: G(['数字']), color: 'coral' },
-    { id: 2, name: '山水岛', kind: 'chars', groups: G(['自然']), color: 'teal' },
-    { id: 3, name: '身体乐园', kind: 'chars', groups: G(['身体']), color: 'sky' },
-    { id: 4, name: '一家人', kind: 'chars', groups: G(['家人']), color: 'sun' },
-    { id: 5, name: '动物园', kind: 'chars', groups: G(['动物']), color: 'grape' },
-    { id: 6, name: '花果园', kind: 'chars', groups: G(['植物']), color: 'teal' },
-    { id: 7, name: '彩虹桥', kind: 'chars', groups: G(['颜色', '方位', '方向']), color: 'coral' },
-    { id: 8, name: '四季谷', kind: 'chars', groups: G(['时间', '天气']), color: 'sky' },
-    { id: 9, name: '动作村', kind: 'chars', groups: G(['动作']), color: 'sun' },
-    { id: 10, name: '小学堂', kind: 'chars', groups: G(['学校']), color: 'grape' },
-    { id: 11, name: '反义屋', kind: 'chars', groups: G(['形容', '物品']), color: 'teal' },
-    { id: 12, name: '常用字塔', kind: 'chars', groups: G(['我你他', '常用字']), color: 'coral' },
-    { id: 13, name: '拼音岛', kind: 'pinyin', color: 'sky', special: true },
-    { id: 14, name: '偏旁岛', kind: 'radical', color: 'sun', special: true },
-    { id: 15, name: '成语山', kind: 'idiom', color: 'grape', special: true },
+  var COLORS = ['coral', 'teal', 'sky', 'sun', 'grape'];
+  var LV = [];
+  function add(id, name, kind, o) {
+    var L = { id: id, name: name, kind: kind, color: COLORS[(id - 1) % 5] };
+    for (var k in o) L[k] = o[k];
+    LV.push(L);
+  }
+  // 第 1 册（和第一版完全一致）
+  [['数字岛', ['数字'], 'coral'], ['山水岛', ['自然'], 'teal'], ['身体乐园', ['身体'], 'sky'], ['一家人', ['家人'], 'sun'],
+   ['动物园', ['动物'], 'grape'], ['花果园', ['植物'], 'teal'], ['彩虹桥', ['颜色', '方位', '方向'], 'coral'], ['四季谷', ['时间', '天气'], 'sky'],
+   ['动作村', ['动作'], 'sun'], ['小学堂', ['学校'], 'grape'], ['反义屋', ['形容', '物品'], 'teal'], ['常用字塔', ['我你他', '常用字'], 'coral']
+  ].forEach(function (a, i) {
+    add(i + 1, a[0], 'chars', { groups: G(a[1]), color: a[2], book: 0, prev: i === 0 ? 0 : i });
+  });
+  add(13, '拼音岛', 'pinyin', { color: 'sky', special: true, book: 'sp', need: 4 });
+  add(14, '偏旁岛', 'radical', { color: 'sun', special: true, book: 'sp', need: 4 });
+  add(15, '成语山', 'idiom', { color: 'grape', special: true, book: 'sp', need: 4 });
+  // 第 2~7 册
+  var NEXT = [
+    [1, ['小身板岛', ['身体二']], ['亲友村', ['亲朋好友']], ['小房子', ['家里的东西']], ['美食街', ['好吃的', '水果蔬菜']], ['衣帽间', ['穿戴', '玩具游戏']], ['数数乐园', ['数量词', '数目大小', '时间二']]],
+    [2, ['江河湖海', ['水和大地', '山川泉池']], ['风雨天', ['天气二', '太空']], ['大森林', ['草木', '田野乡村']], ['动物王国', ['走兽飞禽', '动物身体']], ['小虫海滩', ['小虫海鲜']], ['宝石谷', ['宝石金属', '位置', '声音光影']]],
+    [3, ['巧手屋', ['手的动作']], ['快脚村', ['脚的动作', '来来往往']], ['五官镇', ['嘴巴的事', '眼睛耳朵']], ['勤快村', ['做事情']], ['日子屋', ['吃喝睡', '生活', '会不会']], ['想一想', ['心里想', '练习比赛']]],
+    [4, ['大课堂', ['教室', '课本里']], ['学习角', ['学习', '音乐']], ['职业街', ['各行各业', '城市']], ['大路口', ['路上', '其他']], ['节日彩虹', ['节日', '我们的国家', '颜色二']]],
+    [5, ['反义乐园', ['反义词乐园']], ['心情谷', ['心情性格']], ['问号街', ['问一问', '状态']], ['小帮手岛', ['小帮手']], ['多少桥', ['多少有关', '时间副词', '常用小字']]],
+    [6, ['小物件仓库', ['小物件']], ['数学教室', ['数学小课堂', '手工美工']], ['趣味岛', ['有趣的事', '好品质']], ['字海一', ['常用字·一', '常用字·二']], ['字海二', ['常用字·三', '常用字·四']],
+        ['字海三', ['常用字·五', '常用字·六']], ['字海四', ['常用字·七', '常用字·八']], ['字海五', ['常用字·九', '常用字·十', '常用字·十一']]],
   ];
+  var nid = 16;
+  NEXT.forEach(function (row) {
+    for (var i = 1; i < row.length; i++) {
+      add(nid, row[i][0], 'chars', { groups: G(row[i][1]), book: row[0], prev: i === 1 ? 0 : nid - 1 });
+      nid++;
+    }
+  });
+  add(nid++, '古诗岛', 'poem', { color: 'grape', special: true, book: 'sp', need: 4 });
+  add(nid++, '总复习', 'mix', { color: 'teal', special: true, book: 'sp', minLearned: 10 });
+  MZ.LEVELS = LV;
+  MZ.levelById = function (id) { for (var i = 0; i < LV.length; i++) if (LV[i].id === id) return LV[i]; return null; };
+  MZ.levelHint = function (L) {
+    if (L.minLearned) return '先学会 ' + L.minLearned + ' 个字，再来总复习吧！';
+    if (L.need) return '先通过“' + MZ.levelById(L.need).name + '”这一关，就能来这里啦！';
+    return '先通过前一关，才能来这里哦！';
+  };
   MZ.levelUnlocked = function (L) {
     var s = S.get();
-    function passed(id) { return s.levels[id] && s.levels[id].stars >= 1; }
-    if (L.id === 1) return true;
-    if (L.special) return !!passed(4);
-    return !!passed(L.id - 1);
+    function passed(id) { return !!(s.levels[id] && s.levels[id].stars >= 1); }
+    if (L.minLearned) return S.learnedCount() >= L.minLearned;
+    if (L.need) return passed(L.need);
+    if (L.prev) return passed(L.prev);
+    return true;
   };
   MZ.starsFor = function (score, total) {
     var r = score / total;
@@ -46,6 +78,7 @@
     var all = shuffle([correct].concat(wrongs.slice(0, 3)));
     return { opts: all, ans: all.indexOf(correct) };
   }
+  MZ.mc = mc;
   function uniqueFirst(list, n, bad) {
     var out = [], seen = {};
     (bad || []).forEach(function (b) { seen[b] = 1; });
@@ -53,21 +86,6 @@
     return out;
   }
   function allChars() { return D.order; }
-  // 词性大类：补全句子时，错误选项取自不同词性的字，避免“换个字也说得通”
-  var POS = { '数字': 'num', '自然': 'n', '身体': 'n', '家人': 'n', '动物': 'n', '植物': 'n', '学校': 'n', '物品': 'n', '天气': 'n',
-              '颜色': 'adj', '形容': 'adj', '方位': 'loc', '方向': 'loc', '时间': 'loc', '动作': 'v', '我你他': 'pron', '常用字': 'fn' };
-  var POSOF = {};
-  D.groups.forEach(function (g) { g.chars.forEach(function (c) { POSOF[c] = POS[g.name] || g.name; }); });
-  // bad：构建时算出来的“换成它也成词/成句”的字，一律不出现在选项里
-  function charWrongs(c, pool, n, bad, diffPos) {
-    var no = {}; no[c] = 1;
-    (bad || '').split('').forEach(function (x) { no[x] = 1; });
-    function okc(x) { return !no[x] && (!diffPos || POSOF[x] !== POSOF[c]); }
-    var cand = shuffle(pool.filter(okc));
-    if (cand.length < n) cand = cand.concat(shuffle(allChars().filter(function (x) { return okc(x) && cand.indexOf(x) < 0; })));
-    if (cand.length < n) cand = cand.concat(shuffle(allChars().filter(function (x) { return !no[x] && cand.indexOf(x) < 0; })));
-    return cand.slice(0, n);
-  }
   function pyWrongs(py, c, pool) {
     var pp = MZ.parsePy(py), res = [];
     if (pp.tone) {
@@ -78,49 +96,56 @@
     return uniqueFirst(res, 3, [py]);
   }
   var TONE_NAMES = ['', '一声', '二声', '三声', '四声'];
+  MZ.TONE_NAMES = TONE_NAMES;
 
-  /* ---------- 汉字题 ---------- */
-  function qListen(c, pool) {
-    var m = mc(c, charWrongs(c, pool, 3)), ch = D.chars[c];
-    return { kind: 'listen', prompt: '听一听，这是哪个字？', speak: MZ.say(c), autoSpeak: true, optKind: 'char', opts: m.opts, ans: m.ans,
+  /* ---------- 汉字题 ----------
+     c：这道题考的是哪个字（答完后用来更新“字宝宝”的复习记录）
+     o：{ sim: 是否放几个“长得像”的字当干扰, simN: 最多几个 } */
+  function qListen(c, pool, o) {
+    o = o || {};
+    var wr = MZ.distract(c, 3, { pool: pool, diffSound: true, sim: o.sim !== undefined ? o.sim : Math.random() < 0.5, simN: o.simN || 1 });
+    var m = mc(c, wr), ch = D.chars[c];
+    return { kind: 'listen', c: c, prompt: '听一听，这是哪个字？', speak: MZ.say(c), autoSpeak: true, optKind: 'char', opts: m.opts, ans: m.ans,
              explain: '是“' + c + '”，读 ' + ch.p + '。比如：' + ch.words.join('、') + '。', after: c };
   }
   function qPinyin(c, pool) {
     var ch = D.chars[c], m = mc(ch.p, pyWrongs(ch.p, c, pool));
-    return { kind: 'pinyin', prompt: '这个字怎么读？', big: { text: c, kai: true }, speak: MZ.say(c), optKind: 'py', opts: m.opts, ans: m.ans,
+    return { kind: 'pinyin', c: c, prompt: '这个字怎么读？', big: { text: c, kai: true }, speak: MZ.say(c), optKind: 'py', opts: m.opts, ans: m.ans,
              explain: '“' + c + '”读 ' + ch.p + '。比如：' + ch.words.join('、') + '。', after: c };
   }
-  function qWordFill(c, pool) {
+  function qWordFill(c, pool, o) {
+    o = o || {};
     var ch = D.chars[c], w = pick(ch.words), idx = w.indexOf(c);
     var wi = ch.words.indexOf(w);
-    var m = mc(c, charWrongs(c, pool, 3, ch.wb && ch.wb[wi]));
-    return { kind: 'wordfill', prompt: '补全词语', big: { text: w.slice(0, idx) + '＿' + w.slice(idx + 1), kai: true }, optKind: 'char', opts: m.opts, ans: m.ans,
-             explain: '“' + w + '”，读 ' + ch.wp[wi] + '。', after: w };
+    var m = mc(c, MZ.distract(c, 3, { pool: pool, bad: ch.wb && ch.wb[wi], sim: !!o.sim, simN: o.simN || 1 }));
+    return { kind: 'wordfill', c: c, prompt: '补全词语', big: { text: w.slice(0, idx) + '＿' + w.slice(idx + 1), kai: true }, optKind: 'char', opts: m.opts, ans: m.ans,
+             explain: '“' + w + '”，读 ' + ch.wp[wi] + '。', after: w, word: w };
   }
-  function qSentFill(c, pool) {
+  function qSentFill(c, pool, o) {
+    o = o || {};
     var ch = D.chars[c], idx = ch.sent.indexOf(c);
-    var m = mc(c, charWrongs(c, pool, 3, ch.sb, true));
-    return { kind: 'sentfill', prompt: '补全句子', ruby: { text: ch.sent, py: ch.sp, blank: idx }, optKind: 'char', opts: m.opts, ans: m.ans,
+    var m = mc(c, MZ.distract(c, 3, { pool: pool, bad: ch.sb, diffPos: true, sim: !!o.sim, simN: o.simN || 1 }));
+    return { kind: 'sentfill', c: c, prompt: '补全句子', ruby: { text: ch.sent, py: ch.sp, blank: idx }, optKind: 'char', opts: m.opts, ans: m.ans,
              explain: ch.sent, after: ch.sent };
   }
   function qStrokes(c) {
     var n = D.chars[c].n;
     var wr = uniqueFirst(shuffle([n - 2, n - 1, n + 1, n + 2, n + 3].filter(function (x) { return x >= 1; })), 3, [n]);
     var m = mc(n, wr);
-    return { kind: 'strokes', prompt: '这个字一共有几画？', big: { text: c, kai: true }, optKind: 'text', opts: m.opts.map(function (x) { return x + ' 画'; }), ans: m.ans,
+    return { kind: 'strokes', c: c, prompt: '这个字一共有几画？', big: { text: c, kai: true }, optKind: 'text', opts: m.opts.map(function (x) { return x + ' 画'; }), ans: m.ans,
              explain: '“' + c + '”一共 ' + n + ' 画。', after: c };
   }
   function qTone(c) {
     var ch = D.chars[c], t = MZ.toneOf(ch.p);
     var m = mc(t, [1, 2, 3, 4].filter(function (x) { return x !== t; }));
-    return { kind: 'tone', prompt: '“' + c + '”是第几声？', big: { text: c, kai: true }, speak: MZ.say(c), optKind: 'text',
+    return { kind: 'tone', c: c, prompt: '“' + c + '”是第几声？', big: { text: c, kai: true }, speak: MZ.say(c), optKind: 'text',
              opts: m.opts.map(function (x) { return TONE_NAMES[x]; }), ans: m.ans, explain: '“' + c + '”读 ' + ch.p + '，是' + TONE_NAMES[t] + '。', after: c };
   }
   function qRadical(c) {
     var ch = D.chars[c], ri = ch.r, R = D.radicals;
     var others = shuffle(R.map(function (_, i) { return i; }).filter(function (i) { return i !== ri; })).slice(0, 3);
     var all = shuffle([ri].concat(others));
-    return { kind: 'radical', prompt: '“' + c + '”的偏旁是？', big: { text: c, kai: true }, optKind: 'rad',
+    return { kind: 'radical', c: c, prompt: '“' + c + '”的偏旁是？', big: { text: c, kai: true }, optKind: 'rad',
              opts: all.map(function (i) { return { f: R[i].f, n: R[i].n }; }), ans: all.indexOf(ri),
              explain: '“' + c + '”的偏旁是“' + R[ri].f + '”（' + R[ri].n + '），' + R[ri].m + '。', after: c };
   }
@@ -187,15 +212,44 @@
              explain: it.t + '：' + it.m, after: it.t };
   }
 
+  /* ---------- 古诗题：补上诗句里缺的字 ---------- */
+  function poemList() { return D.passages.filter(function (p) { return p.kind === '古诗'; }); }
+  function qPoemBlank(ps, k) {
+    var line = ps.lines[k], idxs = [], pos, c;
+    for (var i = 0; i < line.length; i++) if (MZ.isCJK(line[i])) idxs.push(i);
+    pos = pick(idxs); c = line[pos];
+    var have = {};
+    line.split('').forEach(function (x) { have[x] = 1; });
+    var bag = {};
+    poemList().forEach(function (p) { p.lines.forEach(function (l) { l.split('').forEach(function (x) { if (MZ.isCJK(x) && !have[x]) bag[x] = 1; }); }); });
+    var m = mc(c, shuffle(Object.keys(bag)).slice(0, 3));
+    return { kind: 'poem', prompt: '补全诗句：《' + ps.title + '》', ruby: { text: line, py: ps.lp[k], blank: pos }, optKind: 'char', opts: m.opts, ans: m.ans,
+             explain: ps.title + '：' + line, after: line };
+  }
+
+  /* ---------- 对外：给“叫醒字宝宝”和小游戏用 ---------- */
+  MZ.Q = {
+    listen: qListen, pinyin: qPinyin, wordfill: qWordFill, sentfill: qSentFill, strokes: qStrokes, tone: qTone, radical: qRadical,
+    idiomBlank: qIdiomBlank, idiomMean: qIdiomMean, poemBlank: qPoemBlank,
+  };
+  MZ.qIdiomBlank = qIdiomBlank;   // 成语详情页的“试一试”复用
+
   /* ---------- 组一关 ---------- */
+  var BUILDERS = { listen: qListen, pinyin: qPinyin, wordfill: qWordFill, sentfill: qSentFill, strokes: qStrokes, tone: qTone, radical: qRadical };
   MZ.buildLevel = function (L) {
     var N = MZ.LEVEL_Q, qs = [], i;
-    if (L.kind === 'chars') {
-      var pool = [];
-      L.groups.forEach(function (g) { pool = pool.concat(D.groups[g].chars); });
-      var picks = shuffle(pool);
-      while (picks.length < N) picks = picks.concat(shuffle(pool));
-      picks = picks.slice(0, N);
+    if (L.kind === 'chars' || L.kind === 'mix') {
+      var pool = [], picks;
+      if (L.kind === 'chars') {
+        L.groups.forEach(function (g) { pool = pool.concat(D.groups[g].chars); });
+        picks = shuffle(pool);
+        while (picks.length < N) picks = picks.concat(shuffle(pool));
+        picks = picks.slice(0, N);
+      } else {
+        pool = MZ.pool('learned', 12).chars;
+        picks = MZ.pickN(pool, N);
+        while (picks.length < N) picks.push(pick(pool));
+      }
       var types = shuffle(['listen', 'pinyin', 'wordfill', 'sentfill', 'listen', 'pinyin', 'wordfill', pick(['strokes', 'tone', 'radical', 'sentfill'])]);
       // 第一题用最简单的两种
       var fi = types.findIndex(function (t) { return t === 'listen' || t === 'pinyin'; });
@@ -204,9 +258,7 @@
         var c = picks[i], t = types[i], ch = D.chars[c];
         if (t === 'radical' && ch.r == null) t = 'pinyin';
         if (t === 'tone' && MZ.toneOf(ch.p) === 0) t = 'pinyin';
-        qs.push({
-          listen: qListen, pinyin: qPinyin, wordfill: qWordFill, sentfill: qSentFill, strokes: qStrokes, tone: qTone, radical: qRadical,
-        }[t](c, pool));
+        qs.push(BUILDERS[t](c, pool));
       }
     } else if (L.kind === 'pinyin') {
       var ini = shuffle(D.pinyin.initials).slice(0, 3), fin = shuffle(FIN).slice(0, 2), sp = shuffle(D.pinyin.spell);
@@ -218,8 +270,15 @@
     } else if (L.kind === 'idiom') {
       var its = shuffle(D.idioms);
       qs = [qIdiomBlank(its[0]), qIdiomMean(its[1]), qIdiomBlank(its[2]), qIdiomMean(its[3]), qIdiomBlank(its[4]), qIdiomMean(its[5]), qIdiomBlank(its[6]), qIdiomMean(its[7])];
+    } else if (L.kind === 'poem') {
+      var s = S.get(), ps = poemList(), read = ps.filter(function (p) { return s.reads[p.id]; });
+      var src = read.length >= 3 ? read : ps, lines = [];
+      src.forEach(function (p) { p.lines.forEach(function (l, k) { lines.push([p, k]); }); });
+      lines = shuffle(lines);
+      var used = {}, chosen = [];
+      lines.forEach(function (x) { if (chosen.length < N && !used[x[0].id + x[1]]) { used[x[0].id + x[1]] = 1; chosen.push(x); } });
+      qs = chosen.map(function (x) { return qPoemBlank(x[0], x[1]); });
     }
     return qs;
   };
-  MZ.qIdiomBlank = qIdiomBlank;   // 成语详情页的“试一试”复用
 })();

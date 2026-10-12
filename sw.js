@@ -1,6 +1,6 @@
-/* 墨点识字 · 离线缓存（自动生成，勿手改）。版本 60111cf402 */
-var CACHE = 'modian-60111cf402';
-var FILES = ["./", "core.js", "data.js", "hanzi-writer.min.js", "icons/apple-touch-icon.png", "icons/icon-192.png", "icons/icon-512.png", "index.html", "licenses.js", "licenses/ARPHICPL.TXT", "licenses/HANZI-WRITER-LICENSE-MIT.txt", "manifest.webmanifest", "quiz.js", "strokes.js", "style.css", "views.js"];
+/* 墨点识字 · 离线缓存（自动生成，勿手改）。版本 2d6b9b32af */
+var CACHE = 'modian-2d6b9b32af';
+var FILES = ["./", "core.js", "data.js", "engine.js", "games.js", "games2.js", "hanzi-writer.min.js", "icons/apple-touch-icon.png", "icons/icon-192.png", "icons/icon-512.png", "index.html", "licenses.js", "licenses/ARPHICPL.TXT", "licenses/HANZI-WRITER-LICENSE-MIT.txt", "manifest.webmanifest", "play.css", "qrun.js", "quiz.js", "review.js", "strokes.js", "style.css", "views.js"];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
 });

@@ -19,12 +19,13 @@
     check: '<svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11" stroke="currentColor" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     lock: '<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="currentColor"/><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="currentColor" stroke-width="2.6" fill="none"/></svg>',
     next: '<svg viewBox="0 0 24 24"><path d="M9 4.5l7.5 7.5L9 19.5" stroke="currentColor" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    bulb: '<svg viewBox="0 0 24 24"><path d="M12 2.8a6.2 6.2 0 00-3.7 11.2c.8.7 1.2 1.4 1.2 2.4h5c0-1 .4-1.7 1.2-2.4A6.2 6.2 0 0012 2.8z" fill="currentColor"/><path d="M9.6 19h4.8M10.4 21.4h3.2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   };
   function icon(n, cls) { return h('span', { class: 'ic ' + (cls || ''), html: I[n] }); }
   function tap(fn) { return function (ev) { MZ.sfx.tap(); fn(ev); }; }
 
   /* ---------- 路由 ---------- */
-  var VIEWS = {}, stack = [], leave = null;
+  var VIEWS = MZ.VIEWS = {}, stack = [], leave = null;
   function doLeave() { if (leave) { try { leave(); } catch (e) { /* ignore */ } leave = null; } MZ.stopSpeak(); }
   function render(name, params) {
     var v = VIEWS[name](params || {});
@@ -46,17 +47,20 @@
   MZ.back = function () {
     if (stack.length > 1) { doLeave(); stack.pop(); var t = stack[stack.length - 1]; render(t.name, t.params); } else MZ.home();
   };
+  // 原地重画当前页面（比如领完宝箱之后）
+  MZ.refresh = function () { var t = stack[stack.length - 1]; if (!t) return; doLeave(); render(t.name, t.params); };
+  MZ.current = function () { return stack.length ? stack[stack.length - 1].name : ''; };
   MZ.refreshChrome = function () {
     var s = S.get();
     document.body.classList.toggle('no-py', !s.set.pinyin);
-    Array.prototype.forEach.call(document.querySelectorAll('[data-stat="stars"]'), function (el) { el.textContent = String(s.stars); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-stat="stars"]'), function (el) { el.textContent = String(S.wallet()); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-stat="streak"]'), function (el) { el.textContent = String(S.streak()); });
   };
 
   /* ---------- 通用部件 ---------- */
   function stats() {
     return h('div', { class: 'stats' },
-      h('span', { class: 'pill star' }, icon('star'), h('b', { data: { stat: 'stars' } }, String(S.get().stars))),
+      h('span', { class: 'pill star', title: '星星' }, icon('star'), h('b', { data: { stat: 'stars' } }, String(S.wallet()))),
       h('span', { class: 'pill fire' }, icon('flame'), h('b', { data: { stat: 'streak' } }, String(S.streak())), h('em', null, '天')));
   }
   function seg(items, active, onPick) {
@@ -78,62 +82,110 @@
     return h('button', { class: 'icon-btn spk ' + (cls || ''), 'aria-label': '朗读', onclick: function (ev) { ev.stopPropagation(); MZ.sfx.tap(); isChar ? MZ.speakChar(text) : MZ.speak(text); } }, icon('speaker'));
   }
   function bar(p, total) { return h('div', { class: 'mbar' }, h('i', { style: { width: Math.round(100 * p / Math.max(1, total)) + '%' } })); }
-  function dailyMark(c) {
-    var s = S.get(), t = MZ.today();
-    if (s.daily.date !== t) s.daily = { date: t, n: 0, done: false, chars: {} };
-    if (!s.daily.chars) s.daily.chars = {};
-    if (c && !s.daily.chars[c]) { s.daily.chars[c] = 1; s.daily.n++; }
-    if (s.daily.n >= MZ.DAILY_GOAL && !s.daily.done) {
-      s.daily.done = true; S.save();
-      setTimeout(function () { MZ.toast('今日目标完成啦！墨墨为你鼓掌 👏'); MZ.confetti(140); MZ.sfx.win(); }, 900);
-    } else S.save();
-  }
-  function groupOf(c) { for (var i = 0; i < D.groups.length; i++) if (D.groups[i].chars.indexOf(c) >= 0) return i; return 0; }
+  var groupOf = MZ.groupOf;
+  MZ.ui = { icon: icon, tap: tap, topbar: topbar, speakBtn: speakBtn, bar: bar, seg: seg, stats: stats };
 
   /* ================= 首页 ================= */
   VIEWS.home = function () {
-    var s = S.get(), learned = S.learnedCount(), done = S.dailyN(), goal = MZ.DAILY_GOAL;
+    var s = S.get(), cnt = MZ.rev.counts(), learned = cnt.learned, tasks = MZ.adv.tasks(), a = MZ.adv.st();
     var passed = Object.keys(s.levels).filter(function (k) { return s.levels[k].stars >= 1; }).length;
-    var say = learned === 0 ? '我是墨墨！我们从“一”开始学吧。'
-      : done < goal ? '再学 ' + (goal - done) + ' 个字，就完成今日目标啦！'
-      : '今天的目标完成啦，去闯关玩一玩吧！';
-    function card(cls, glyph, title, sub, meta, to) {
-      return h('button', { class: 'bigcard ' + cls, onclick: tap(function () { MZ.go(to.name, to.params); }) },
-        h('div', { class: 'bc-glyph' }, glyph), h('h3', null, title), h('p', null, sub), h('div', { class: 'bc-meta' }, meta));
+    var plays = 0; for (var pk in s.plays) plays += s.plays[pk];
+    var ready = MZ.adv.chestReady(), opened = !!a.chest;
+    var left = tasks[0].goal - tasks[0].n;
+    var say = ready ? '小冒险完成啦！快开宝箱～'
+      : learned === 0 ? '我是墨墨！从“一”开始学吧。'
+      : cnt.due > 0 ? cnt.due + ' 个字宝宝睡着啦，快去叫醒！'
+      : !tasks[0].done ? '再认识 ' + left + ' 个新字，小冒险就完成啦！'
+      : !tasks[2].done ? '来玩一局小游戏，赢星星换帽子！'
+      : opened ? '宝箱开啦。随便逛逛吧！' : '今天真棒，明天见！';
+
+    function card3(cls, glyph, title, sub, meta, to, badge) {
+      return h('button', { class: 'card3 ' + cls, onclick: tap(function () { MZ.go(to.name, to.params); }) },
+        h('div', { class: 'c3-glyph' }, glyph),
+        h('div', { class: 'c3-text' }, h('h3', null, title), h('p', null, sub), h('div', { class: 'bc-meta' }, meta)),
+        badge ? h('span', { class: 'badge' }, String(badge)) : null);
     }
-    var dots = [];
-    for (var i = 0; i < goal; i++) dots.push(h('span', { class: 'gdot' + (i < done ? ' on' : '') }, icon('star')));
+    function card5(cls, glyph, title, meta, to, badge) {
+      return h('button', { class: 'card5 ' + cls, onclick: tap(function () { MZ.go(to.name, to.params); }) },
+        h('div', { class: 'c5-glyph' }, glyph), h('h3', null, title), h('p', null, meta), badge ? h('span', { class: 'badge' }, String(badge)) : null);
+    }
+
+    var chips = tasks.map(function (t) {
+      return h('button', { class: 'atask' + (t.done ? ' done' : ''), onclick: tap(function () { MZ.go(t.to); }) },
+        h('span', { class: 'at-ic' }, t.done ? icon('check') : t.emoji),
+        h('span', { class: 'at-tx' }, h('b', null, t.label), h('em', null, t.done ? (t.auto ? '都醒着' : '已完成') : t.n + ' / ' + t.goal)));
+    });
+    var chest = h('button', { class: 'chest' + (ready ? ' ready' : opened ? ' open' : ''), onclick: tap(function () {
+      if (ready) return openChest();
+      MZ.toast(opened ? '今天的宝箱已经打开啦，明天再来！' : '做完左边三件小事，就能打开宝箱！');
+    }) }, h('span', { class: 'ch-ic' }, opened ? '🎊' : '🎁'), h('b', null, ready ? '打开宝箱' : opened ? '已打开' : '小宝箱'));
+    function openChest() {
+      var gain = MZ.adv.open();
+      if (!gain) return;
+      MZ.sfx.chest(); MZ.confetti(150);
+      MZ.modal({
+        title: '宝箱打开啦！',
+        body: h('div', { class: 'chest-pop' }, MZ.mascot('cheer', 100), h('div', null, h('div', { class: 'chest-n' }, '+' + gain + ' ⭐'), h('p', null, '这是今天的奖励。星星可以给墨墨买新帽子哦！'))),
+        buttons: [{ label: '去看看装扮', kind: 'ghost', onClick: function () { MZ.go('shop'); } }, { label: '太好了', kind: 'coral', onClick: function () { MZ.refreshChrome(); MZ.refresh(); } }],
+      });
+      MZ.refreshChrome();
+    }
+
     var node = h('section', { class: 'screen home' },
       h('header', { class: 'top home-top' },
-        h('div', { class: 'brand' }, MZ.mascot('happy', 52),
-          h('div', null, h('h1', null, '墨点识字'), h('p', null, '和墨墨一起，开心认汉字'))),
+        h('div', { class: 'brand' }, h('div', null, h('h1', null, '墨点识字'), h('p', null, '和墨墨一起，开心认汉字'))),
         h('div', { class: 'grow' }), stats(),
+        h('button', { class: 'icon-btn emo', 'aria-label': '给墨墨换装扮', onclick: tap(function () { MZ.go('shop'); }) }, h('span', null, '🎩')),
         h('button', { class: 'icon-btn', 'aria-label': '设置', onclick: tap(openSettings) }, icon('gear'))),
-      h('div', { class: 'cards' },
-        card('c-coral', '字', '识字', '看笔顺 · 描红', ['已学 ' + learned + ' / ' + ALL + ' 字', bar(learned, ALL)], { name: 'learn' }),
-        card('c-sky', '拼', '拼音偏旁', '声母韵母 · 偏旁', ['声调 · 偏旁 ' + D.radicals.length + ' 个', bar(((s.levels[13] && s.levels[13].stars) ? 1 : 0) + ((s.levels[14] && s.levels[14].stars) ? 1 : 0), 2)], { name: 'pinyin' }),
-        card('c-grape', '读', '成语阅读', '成语故事 · 儿歌', ['已读 ' + (S.count(s.idioms) + S.count(s.reads)) + ' / ' + (D.idioms.length + D.passages.length) + ' 篇', bar(S.count(s.idioms) + S.count(s.reads), D.idioms.length + D.passages.length)], { name: 'idioms' }),
-        card('c-teal', '闯', '闯关成就', '闯关 · 领奖章', ['通关 ' + passed + ' / ' + MZ.LEVELS.length, bar(passed, MZ.LEVELS.length)], { name: 'levels' })),
-      h('footer', { class: 'home-foot' },
-        h('button', { class: 'talk', onclick: function () { MZ.speak(say); MZ.sfx.tap(); } }, MZ.mascot('cheer', 78), h('div', { class: 'bubble' }, say, icon('speaker'))),
-        h('div', { class: 'goal' }, h('span', null, '今日目标'), h('div', { class: 'gdots' }, dots), h('em', null, done + ' / ' + goal))));
+      h('div', { class: 'hero', data: { bg: (s.wear && s.wear.bg) || 'sky' } },
+        h('button', { class: 'hero-m', 'aria-label': '墨墨', onclick: function () { MZ.speak(say); MZ.sfx.tap(); } }, MZ.mascot(ready ? 'cheer' : cnt.due > 0 ? 'happy' : 'happy', 128)),
+        h('div', { class: 'adv' },
+          h('div', { class: 'adv-say' }, h('span', null, say), icon('speaker')),
+          h('div', { class: 'adv-h' }, '今日小冒险'),
+          h('div', { class: 'atasks' }, chips)),
+        chest),
+      h('div', { class: 'cards3' },
+        card3('c-coral', '字', '识字', '看笔顺 · 描红 · 认新字', ['已学 ' + learned + ' / ' + ALL + ' 字', bar(learned, ALL)], { name: 'learn' }),
+        card3('c-sky', '⏰', '叫醒字宝宝', cnt.due > 0 ? cnt.due + ' 个字宝宝睡着啦' : (learned ? '字宝宝们都醒着' : '学了字才有字宝宝'), cnt.fuzzy > 0 ? ['迷糊字宝 ' + cnt.fuzzy + ' 个', bar(cnt.s3, Math.max(1, learned))] : ['牢记 ' + cnt.s3 + ' 个字', bar(cnt.s3, Math.max(1, learned))], { name: 'wake' }, cnt.due || 0),
+        card3('c-sun', '🎮', '小游戏', '6 种玩法 · 赢星星', ['已玩 ' + plays + ' 局', bar(Math.min(plays, 30), 30)], { name: 'games' })),
+      h('div', { class: 'cards5' },
+        card5('c-grape', '✍️', '听写', '听一听 写出来', { name: 'dictate' }),
+        card5('c-teal', '📒', '字宝册', cnt.learned + ' / ' + ALL, { name: 'album' }),
+        card5('c-sky', '🔤', '拼音偏旁', '声母 韵母 偏旁', { name: 'pinyin' }),
+        card5('c-coral', '📖', '故事儿歌', '成语 · 古诗 · 故事', { name: 'idioms' }),
+        card5('c-sun', '🏆', '闯关成就', '通关 ' + passed + ' / ' + MZ.LEVELS.length, { name: 'levels' })));
     return { node: node };
   };
 
-  /* ================= 识字：分组 + 字表 ================= */
+  /* ================= 识字：册 → 分组 → 字表 ================= */
   VIEWS.learn = function (p) {
-    var s = S.get(), gi = p.g;
+    var s = S.get(), gi = p.g, bi;
+    function firstOpenGroup(b) {
+      var gs = D.books[b].groups;
+      for (var i = 0; i < gs.length; i++) if (D.groups[gs[i]].chars.some(function (c) { return !s.learned[c]; })) return gs[i];
+      return gs[0];
+    }
     if (gi == null) {
-      gi = 0;
-      for (var i = 0; i < D.groups.length; i++) {
-        if (D.groups[i].chars.some(function (c) { return !s.learned[c]; })) { gi = i; break; }
+      if (p.b != null) gi = firstOpenGroup(p.b);
+      else {
+        var nx = MZ.nextNew(1)[0];
+        gi = nx ? MZ.groupOf(nx) : 0;
       }
     }
-    var side = h('nav', { class: 'side' }), main = h('div', { class: 'main' });
+    bi = D.groups[gi].book;
+    var strip = h('nav', { class: 'bookstrip' }), side = h('nav', { class: 'side' }), main = h('div', { class: 'main' });
+    function renderStrip() {
+      MZ.clear(strip);
+      D.books.forEach(function (b, k) {
+        var st = MZ.bookStat(k), nm = b.name.split(' · ');
+        strip.appendChild(h('button', { class: 'bk' + (k === bi ? ' on' : '') + (st.got === st.total ? ' full' : ''), onclick: tap(function () { bi = k; gi = firstOpenGroup(k); renderStrip(); renderSide(); renderMain(); }) },
+          h('span', { class: 'bk-ic' }, b.icon), h('span', { class: 'bk-t' }, h('i', null, nm[0]), h('b', null, nm[1] || nm[0])), h('em', null, st.got + '/' + st.total), bar(st.got, st.total)));
+      });
+    }
     function renderSide() {
       MZ.clear(side);
-      D.groups.forEach(function (g, k) {
-        var n = g.chars.filter(function (c) { return s.learned[c]; }).length;
+      D.books[bi].groups.forEach(function (k) {
+        var g = D.groups[k], n = g.chars.filter(function (c) { return s.learned[c]; }).length;
         side.appendChild(h('button', { class: 'side-b' + (k === gi ? ' on' : ''), onclick: tap(function () { gi = k; renderSide(); renderMain(); }) },
           h('span', null, g.name), h('em', null, n + '/' + g.chars.length), bar(n, g.chars.length)));
       });
@@ -141,18 +193,27 @@
     function renderMain() {
       MZ.clear(main);
       var g = D.groups[gi], n = g.chars.filter(function (c) { return s.learned[c]; }).length;
-      main.appendChild(h('div', { class: 'grp-head' }, h('h2', null, g.name), h('span', null, '已学会 ' + n + ' / ' + g.chars.length + ' 个字')));
+      var nextC = g.chars.filter(function (c) { return !s.learned[c]; })[0];
+      main.appendChild(h('div', { class: 'grp-head' }, h('h2', null, g.name), h('span', null, n + ' / ' + g.chars.length + ' 个字'),
+        h('div', { class: 'grow' }),
+        nextC ? h('button', { class: 'btn coral sm', onclick: tap(function () { MZ.go('char', { c: nextC, g: gi }); }) }, '学下一个：' + nextC, icon('next')) : h('span', { class: 'allgot' }, '这一组全学会啦 🎉')));
       var grid = h('div', { class: 'tiles' });
       g.chars.forEach(function (c) {
-        var ch = D.chars[c], done = !!s.learned[c];
-        grid.appendChild(h('button', { class: 'tile' + (done ? ' done' : ''), onclick: tap(function () { MZ.go('char', { c: c, g: gi }); }) },
-          h('i', null, ch.p), h('b', null, c), done ? h('span', { class: 'tick' }, icon('check')) : null));
+        var ch = D.chars[c], done = !!s.learned[c], due = MZ.rev.isDue(c), fz = MZ.rev.isFuzzy(c);
+        grid.appendChild(h('button', { class: 'tile' + (ch.e ? ' has-e' : '') + (done ? ' done' : '') + (done ? ' st' + MZ.rev.stage(c) : ''), onclick: tap(function () { MZ.go('char', { c: c, g: gi }); }) },
+          ch.e ? h('span', { class: 'te' }, ch.e) : null,
+          h('i', null, ch.p), h('b', null, c),
+          done ? h('span', { class: 'tick' }, icon('check')) : null,
+          done && (fz || due) ? h('span', { class: 'zz' }, fz ? '😵' : '😴') : null));
       });
       main.appendChild(grid);
     }
-    renderSide(); renderMain();
-    var node = h('section', { class: 'screen learn th-coral' }, topbar({ title: '识字' }), h('div', { class: 'split' }, side, main));
-    return { node: node, after: function () { var on = side.querySelector('.side-b.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' }); } };
+    renderStrip(); renderSide(); renderMain();
+    var node = h('section', { class: 'screen learn th-coral' }, topbar({ title: '识字' }), strip, h('div', { class: 'split' }, side, main));
+    return { node: node, after: function () {
+      var on = side.querySelector('.side-b.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+      var bk = strip.querySelector('.bk.on'); if (bk && bk.scrollIntoView) bk.scrollIntoView({ block: 'nearest', inline: 'center' });
+    } };
   };
 
   /* ================= 汉字详情：笔顺 + 描红 ================= */
@@ -163,15 +224,18 @@
     var prog = h('div', { class: 'strk' }, '共 ' + ch.n + ' 笔');
     var board = h('div', { class: 'board' }, hw, prog);
     var hint = h('div', { class: 'hint' }, '先点“看笔顺”，再点“我来写”');
+    var stageChip = h('span', { class: 'chip stg' });
     var learnedBtn = h('button', { class: 'btn ghost sm', onclick: tap(function () {
-      var s = S.get(); if (s.learned[c]) return;
-      s.learned[c] = Date.now(); S.save(); dailyMark(c); MZ.afterActivity(); refreshLearned();
+      if (MZ.learn(c)) { MZ.dailyMark(c); MZ.afterActivity(); refreshLearned(); }
     }) });
     function refreshLearned() {
       var done = !!S.get().learned[c];
       MZ.clear(learnedBtn); learnedBtn.classList.toggle('done', done);
       learnedBtn.appendChild(done ? icon('check') : document.createTextNode(''));
-      learnedBtn.appendChild(document.createTextNode(done ? ' 已学会' : '我认识这个字了'));
+      learnedBtn.appendChild(document.createTextNode(done ? ' 已学会' : '我学会了'));
+      var st = MZ.rev.stage(c), txt = '';
+      if (done) txt = MZ.rev.isFuzzy(c) ? '😵 迷糊字宝' : MZ.rev.isDue(c) ? '😴 睡着了' : ['', '🌱 刚认识', '🌿 比较熟', '🌟 牢记'][st];
+      stageChip.textContent = txt; stageChip.style.display = txt ? '' : 'none';
     }
     function setHint(t) { hint.textContent = t; }
     function watch() {
@@ -188,7 +252,7 @@
       try { writer.cancelQuiz(); } catch (e) { /* ignore */ }
       writer.hideCharacter();
       prog.textContent = '已写 0 / ' + ch.n + ' 笔';
-      setHint('照着浅色的字，一笔一笔写。写错了会有提示。');
+      setHint('照着浅色的字，一笔一笔写。写歪了会有小提示。');
       writer.quiz({
         leniency: 1.5, showHintAfterMisses: 2, highlightOnComplete: true, markStrokeCorrectAfterMisses: 4,
         onCorrectStroke: function (d) { MZ.sfx.stroke(); prog.textContent = '已写 ' + (d.strokeNum + 1) + ' / ' + ch.n + ' 笔'; },
@@ -198,9 +262,10 @@
     }
     function finishWrite() {
       var s = S.get(), first = !s.starred[c];
-      s.wrote++; var newly = !s.learned[c]; s.learned[c] = s.learned[c] || Date.now();
+      s.wrote++;
+      var newly = MZ.learn(c);
       if (first) { s.starred[c] = 1; s.stars++; }
-      S.save(); dailyMark(c);
+      S.save(); if (newly) MZ.dailyMark(c);
       prog.textContent = '写完啦！';
       setHint(MZ.pick(MZ.PRAISE) + (first ? ' 获得 1 颗星星！' : ''));
       MZ.sfx.ok(); if (first) setTimeout(MZ.sfx.star, 350);
@@ -214,24 +279,32 @@
       return h('button', { class: 'wcard', onclick: tap(function () { MZ.speak(w); }) },
         MZ.ruby(w, w.split('').map(function (_, k) { return ch.wp[i].split(' ')[k]; }), { tap: false, cls: 'lg' }), icon('speaker'));
     });
-    var chips = [h('span', { class: 'chip' }, ch.n + ' 画')];
+    var chips = [h('span', { class: 'chip' }, ch.n + ' 画'), stageChip];
     if (ch.r != null) {
       var R = D.radicals[ch.r];
       chips.push(h('button', { class: 'chip link', onclick: tap(function () { MZ.go('pinyin', { tab: 'rad', ri: ch.r }); }) }, '偏旁 ' + R.f + '（' + R.n + '）'));
     }
-    var info = h('div', { class: 'info' },
-      h('div', { class: 'py-row' }, h('div', { class: 'bigpy' }, ch.p), speakBtn(c, 'big', true)),
+    var simBox = null;
+    if (ch.sim) {
+      simBox = h('div', { class: 'simrow' }, h('h4', null, '长得像，看仔细哦'),
+        h('div', { class: 'xchips' }, ch.sim.split('').slice(0, 5).map(function (x) {
+          return h('button', { class: 'xchip link', onclick: tap(function () { MZ.go('char', { c: x, g: groupOf(x) }, { replace: true }); }) }, h('b', null, x), h('i', null, D.chars[x].p));
+        })));
+    }
+    var info = h('div', { class: 'info' }, h('div', { class: 'info-body' },
+      h('div', { class: 'py-row' }, h('div', { class: 'bigpy' }, ch.p), speakBtn(c, 'big', true), h('div', { class: 'grow' }), ch.e ? h('div', { class: 'pic', 'aria-hidden': 'true' }, ch.e) : null),
       h('div', { class: 'chips' }, chips),
-      ch.note ? h('div', { class: 'note' }, ch.note) : null,
       h('h4', null, '组词'), h('div', { class: 'wcards' }, wordCards),
       h('h4', null, '例句'),
       h('div', { class: 'sent' }, MZ.ruby(ch.sent, ch.sp, { cls: 'md' }), speakBtn(ch.sent, 'sm')),
+      ch.note ? h('div', { class: 'note' }, '💡 ' + ch.note) : null,
+      simBox),
       h('div', { class: 'info-foot' },
         learnedBtn,
         h('div', { class: 'nav2' },
-          h('button', { class: 'btn ghost sm', onclick: tap(function () { MZ.go('char', { c: list[(idx - 1 + list.length) % list.length], g: gi }, { replace: true }); }) }, icon('back'), '上一个'),
+          h('button', { class: 'btn ghost sm sq', 'aria-label': '上一个', onclick: tap(function () { MZ.go('char', { c: list[(idx - 1 + list.length) % list.length], g: gi }, { replace: true }); }) }, icon('back')),
           h('span', null, (idx + 1) + ' / ' + list.length),
-          h('button', { class: 'btn ghost sm', onclick: tap(function () { MZ.go('char', { c: list[(idx + 1) % list.length], g: gi }, { replace: true }); }) }, '下一个', icon('next')))));
+          h('button', { class: 'btn ghost sm sq', 'aria-label': '下一个', onclick: tap(function () { MZ.go('char', { c: list[(idx + 1) % list.length], g: gi }, { replace: true }); }) }, icon('next')))));
     var node = h('section', { class: 'screen char th-coral' }, topbar({ title: '识字 · ' + D.groups[gi].name }),
       h('div', { class: 'char-body' },
         h('div', { class: 'left' },
@@ -404,11 +477,12 @@
     };
   }
   VIEWS.idioms = function (p) {
-    var cats = ['全部', '寓言', '品格', '风景', '心情', '祝福'], cat = p.cat || '全部', s = S.get();
+    var cats = ['全部', '寓言', '典故', '品格', '动物', '风景', '心情', '祝福', '日常'], cat = p.cat || '全部', s = S.get();
     var o = storyTabs('idiom'); o.title = '成语';
     var node = h('section', { class: 'screen story th-grape' }, topbar(o));
     var chips = h('div', { class: 'cats' }, cats.map(function (c) {
-      return h('button', { class: 'cat' + (c === cat ? ' on' : ''), onclick: tap(function () { MZ.go('idioms', { cat: c }, { replace: true }); }) }, c);
+      var n = c === '全部' ? D.idioms.length : D.idioms.filter(function (x) { return x.c === c; }).length;
+      return h('button', { class: 'cat' + (c === cat ? ' on' : ''), onclick: tap(function () { MZ.go('idioms', { cat: c }, { replace: true }); }) }, c, h('em', null, String(n)));
     }));
     var grid = h('div', { class: 'itiles' });
     D.idioms.forEach(function (it, i) {
@@ -465,16 +539,21 @@
     return { node: node };
   };
 
-  VIEWS.reads = function () {
-    var s = S.get();
+  VIEWS.reads = function (p) {
+    var s = S.get(), kinds = ['全部', '儿歌', '短文', '故事', '古诗'], kind = p.kind || '全部';
     var o = storyTabs('read'); o.title = '阅读';
+    var chips = h('div', { class: 'cats' }, kinds.map(function (k) {
+      var n = k === '全部' ? D.passages.length : D.passages.filter(function (x) { return x.kind === k; }).length;
+      return h('button', { class: 'cat' + (k === kind ? ' on' : ''), onclick: tap(function () { MZ.go('reads', { kind: k }, { replace: true }); }) }, k, h('em', null, String(n)));
+    }));
     var grid = h('div', { class: 'books' });
     D.passages.forEach(function (ps) {
+      if (kind !== '全部' && ps.kind !== kind) return;
       var done = !!s.reads[ps.id];
       grid.appendChild(h('button', { class: 'book' + (done ? ' done' : ''), onclick: tap(function () { MZ.go('passage', { id: ps.id }); }) },
-        h('span', { class: 'kind' }, ps.kind), h('b', null, ps.title), h('i', null, ps.lines[0]), done ? h('span', { class: 'tick' }, icon('check')) : null));
+        h('span', { class: 'kind' }, ps.kind), h('b', null, ps.title), ps.by ? h('em', { class: 'by' }, ps.by) : null, h('i', null, ps.lines[0]), done ? h('span', { class: 'tick' }, icon('check')) : null));
     });
-    return { node: h('section', { class: 'screen story th-grape' }, topbar(o), h('div', { class: 'story-body' }, h('div', { class: 'pin-scroll' }, grid))) };
+    return { node: h('section', { class: 'screen story th-grape' }, topbar(o), h('div', { class: 'story-body' }, chips, h('div', { class: 'pin-scroll' }, grid))) };
   };
 
   VIEWS.passage = function (p) {
@@ -537,7 +616,7 @@
     var o = storyTabs('read'); o.title = ps.title;
     var node = h('section', { class: 'screen passage th-grape' }, topbar(o),
       h('div', { class: 'passage-body' },
-        h('div', { class: 'pleft' }, h('div', { class: 'ptitle' }, h('h2', null, ps.title), h('span', { class: 'kind' }, ps.kind)), text),
+        h('div', { class: 'pleft' }, h('div', { class: 'ptitle' }, h('h2', null, ps.title), h('span', { class: 'kind' }, ps.kind), ps.by ? h('span', { class: 'by' }, ps.by) : null), text),
         h('div', { class: 'pright' },
           h('div', { class: 'pact' },
             h('button', { class: 'btn grape', onclick: tap(readAll) }, icon('speaker'), '朗读全文'),
@@ -550,26 +629,40 @@
 
   /* ================= 闯关 / 成就 ================= */
   VIEWS.levels = function (p) {
-    var tab = p.tab || 'lv', s = S.get();
+    var tab = p.tab || 'lv', s = S.get(), bk = p.bk;
+    function passedL(L) { return !!(s.levels[L.id] && s.levels[L.id].stars >= 1); }
+    function levelsOf(b) { return MZ.LEVELS.filter(function (L) { return L.book === b; }); }
+    if (bk == null) {
+      bk = 'sp';
+      for (var bb = 0; bb < D.books.length; bb++) { if (levelsOf(bb).some(function (L) { return !passedL(L); })) { bk = bb; break; } }
+    }
     var node = h('section', { class: 'screen lv th-teal' }, topbar({
       title: tab === 'lv' ? '闯关' : '成就',
       tabs: [{ k: 'lv', label: '闯关' }, { k: 'ach', label: '成就' }], tab: tab,
       onTab: function (k) { MZ.go('levels', { tab: k }, { replace: true }); },
     }));
     if (tab === 'lv') {
+      var strip = h('nav', { class: 'bookstrip sm' });
+      var books = D.books.map(function (b, k) { return { k: k, icon: b.icon, t1: '第' + (k + 1) + '册', t2: b.name.split(' · ')[1] || b.name }; }).concat([{ k: 'sp', icon: '⭐', t1: '特别', t2: '特别关卡' }]);
+      books.forEach(function (b) {
+        var ls = levelsOf(b.k), n = ls.filter(passedL).length;
+        strip.appendChild(h('button', { class: 'bk' + (b.k === bk ? ' on' : ''), onclick: tap(function () { MZ.go('levels', { bk: b.k }, { replace: true }); }) },
+          h('span', { class: 'bk-ic' }, b.icon), h('span', { class: 'bk-t' }, h('i', null, b.t1), h('b', null, b.t2)), h('em', null, n + '/' + ls.length), bar(n, ls.length)));
+      });
       var grid = h('div', { class: 'lvgrid' });
-      MZ.LEVELS.forEach(function (L) {
+      levelsOf(bk).forEach(function (L) {
         var open = MZ.levelUnlocked(L), st = s.levels[L.id] ? s.levels[L.id].stars : 0;
         var stars = [0, 1, 2].map(function (k) { return h('span', { class: 'sstar' + (k < st ? ' on' : '') }, icon('star')); });
+        var sub = L.kind === 'chars' ? L.groups.slice(0, 2).map(function (g) { return D.groups[g].name; }).join(' ') + (L.groups.length > 2 ? ' 等' : '')
+          : L.kind === 'pinyin' ? '声母 韵母 拼读' : L.kind === 'radical' ? '偏旁部首' : L.kind === 'poem' ? '补全诗句' : L.kind === 'mix' ? '学过的字大回顾' : '成语';
         grid.appendChild(h('button', { class: 'lvcard c-' + L.color + (open ? '' : ' locked') + (L.special ? ' special' : ''), onclick: tap(function () {
-          if (!open) { MZ.toast(L.special ? '先通过“一家人”这一关，就能来这里啦！' : '先通过前一关，才能来这里哦！'); return; }
+          if (!open) { MZ.toast(MZ.levelHint(L)); return; }
           startIntro(L);
         }) },
-          h('span', { class: 'no' }, String(L.id)), h('b', null, L.name),
-          h('i', null, L.kind === 'chars' ? D.groups[L.groups[0]].name + (L.groups.length > 1 ? ' 等' : '') : L.kind === 'pinyin' ? '声母 韵母 拼读' : L.kind === 'radical' ? '偏旁部首' : '成语'),
+          h('span', { class: 'no' }, String(L.id)), h('b', null, L.name), h('i', null, sub),
           open ? h('div', { class: 'sstars' }, stars) : h('span', { class: 'lockic' }, icon('lock'))));
       });
-      node.appendChild(h('div', { class: 'lv-body' }, h('p', { class: 'tip' }, '每关 8 道题。答对越多，星星越多：★ 3 颗需要至少答对 7 题。'), h('div', { class: 'pin-scroll' }, grid)));
+      node.appendChild(h('div', { class: 'lv-body' }, strip, h('p', { class: 'tip' }, '每关 8 道题。答对越多，星星越多：★ 3 颗需要至少答对 7 题。'), h('div', { class: 'pin-scroll' }, grid)));
     } else {
       var n = MZ.ACH.filter(function (a) { return s.ach[a.id]; }).length;
       var ag = h('div', { class: 'achgrid' });
@@ -587,100 +680,34 @@
         buttons: [{ label: '再等等', kind: 'ghost' }, { label: '开始闯关', kind: 'coral', onClick: function () { MZ.go('quiz', { id: L.id }); } }],
       });
     }
-    return { node: node };
+    return { node: node, after: function () { var on = node.querySelector('.bk.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'center' }); } };
   };
 
   VIEWS.quiz = function (p) {
-    var L = MZ.LEVELS.filter(function (l) { return l.id === p.id; })[0];
-    var qs = MZ.buildLevel(L), N = qs.length, i = 0, score = 0, locked = false, done = false;
-    var segs = h('div', { class: 'qsegs' }, qs.map(function () { return h('i'); }));
-    var scoreEl = h('span', { class: 'pill star' }, icon('star'), h('b', null, '0'));
-    var area = h('div', { class: 'qarea' }), sheet = h('div', { class: 'qsheet' });
-    var node = h('section', { class: 'screen quiz th-' + L.color },
-      h('header', { class: 'top' },
-        h('button', { class: 'icon-btn', 'aria-label': '退出', onclick: tap(function () {
-          if (done) { MZ.back(); return; }
-          MZ.modal({ title: '要退出吗？', body: '退出后，这一关的成绩不会保存。', buttons: [{ label: '继续闯关', kind: 'coral' }, { label: '退出', kind: 'ghost', onClick: function () { MZ.back(); } }] });
-        }) }, icon('close')),
-        h('div', { class: 'ttl' }, '第 ' + L.id + ' 关 · ' + L.name), segs, h('div', { class: 'grow' }), scoreEl), area, sheet);
-
-    function optNode(q, o, k) {
-      var b;
-      var click = function () { choose(k, b); };
-      if (q.optKind === 'rad') b = h('button', { class: 'opt rad', onclick: tap(click) }, h('b', null, o.f), h('i', null, o.n));
-      else b = h('button', { class: 'opt ' + (q.optKind === 'char' ? 'char' : q.optKind === 'py' ? 'py' : 'text'), onclick: tap(click) }, String(o));
-      return b;
-    }
-    // 题目内容太高时（不同 iPad 屏幕比例、两行的句子等），整体等比缩小，保证不压到顶栏和底部的反馈条
-    function fitQ() {
-      var box = area.querySelector('.qfit');
-      if (!box) return;
-      box.style.zoom = '';
-      var cs = getComputedStyle(area);
-      var avail = area.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-      var need = box.offsetHeight;
-      if (avail < 80 || need <= avail) return;
-      box.style.zoom = String(Math.max(0.6, Math.floor(avail / need * 100) / 100));
-    }
-    function onResize() { if (!done) fitQ(); }
-    window.addEventListener('resize', onResize);
-    function showQ() {
-      locked = false; MZ.clear(area); sheet.classList.remove('on'); MZ.clear(sheet);
-      var q = qs[i];
-      Array.prototype.forEach.call(segs.children, function (s, k) { s.className = k < i ? (s._ok ? 'ok' : 'no') : k === i ? 'cur' : ''; });
-      var big = null;
-      if (q.big) {
-        if (q.big.py && q.big.py.length) big = MZ.ruby(q.big.text, q.big.py, { tap: false, cls: 'xxl' });
-        else big = h('div', { class: 'qbig' + (q.big.kai ? ' kai' : '') + (q.big.text.length > 3 ? ' long' : '') }, q.big.text);
-      } else if (q.ruby) {
-        big = MZ.ruby(q.ruby.text, q.ruby.py, { blank: function (k) { return k === q.ruby.blank; }, tap: false, cls: 'xl' });
-      }
-      var opts = h('div', { class: 'qopts ' + (q.optKind === 'text' && q.opts.some(function (o) { return String(o).length > 9; }) ? 'one' : 'four') });
-      q.opts.forEach(function (o, k) { opts.appendChild(optNode(q, o, k)); });
-      var fitBox = h('div', { class: 'qfit' });
-      fitBox.appendChild(h('div', { class: 'qprompt' }, q.prompt, q.speak ? speakBtn(q.speak, 'sm') : null));
-      if (big) fitBox.appendChild(h('div', { class: 'qstage' }, big));
-      fitBox.appendChild(opts);
-      area.appendChild(fitBox);
-      fitQ();
-      if (q.autoSpeak && q.speak) setTimeout(function () { if (!done) MZ.speak(q.speak); }, 350);
-    }
-    function choose(k, btn) {
-      if (locked) return; locked = true;
-      var q = qs[i], ok = k === q.ans, opts = area.querySelector('.qopts');
-      segs.children[i]._ok = ok;
-      btn.classList.add(ok ? 'right' : 'wrong');
-      if (!ok) { opts.children[q.ans].classList.add('right'); btn.classList.add('shake'); }
-      if (ok) { score++; scoreEl.querySelector('b').textContent = String(score); MZ.sfx.ok(); } else MZ.sfx.bad();
-      Array.prototype.forEach.call(opts.children, function (o) { o.disabled = true; });
-      MZ.clear(sheet);
-      sheet.appendChild(MZ.mascot(ok ? 'cheer' : 'oops', 70));
-      sheet.appendChild(h('div', { class: 'qfb' }, h('b', null, ok ? MZ.pick(MZ.PRAISE) : MZ.pick(MZ.TRYAGAIN)), h('p', null, q.explain)));
-      sheet.appendChild(h('button', { class: 'btn ' + (ok ? 'teal' : 'coral') + ' lg', onclick: tap(function () { i++; i < N ? showQ() : finish(); }) }, i + 1 < N ? '下一题' : '看结果', icon('next')));
-      sheet.classList.add('on');
-      if (q.after) setTimeout(function () { if (!done) MZ.speak(q.after); }, 450);
-    }
-    function finish() {
-      done = true; MZ.stopSpeak();
-      var s = S.get(), old = s.levels[L.id] || { stars: 0, best: 0 }, ns = MZ.starsFor(score, N), gain = Math.max(0, ns - old.stars);
-      s.levels[L.id] = { stars: Math.max(old.stars, ns), best: Math.max(old.best, score) };
-      s.stars += gain; S.save();
-      var nextL = MZ.LEVELS.filter(function (l) { return l.id === L.id + 1; })[0];
-      MZ.clear(area); MZ.clear(sheet); sheet.classList.remove('on');
-      Array.prototype.forEach.call(segs.children, function (x) { x.className = x._ok ? 'ok' : 'no'; });
-      var stars = [0, 1, 2].map(function (k) { return h('span', { class: 'rstar' + (k < ns ? ' on' : ''), style: { animationDelay: (0.35 + k * 0.35) + 's' } }, icon('star')); });
-      area.appendChild(h('div', { class: 'result' }, MZ.mascot(ns >= 2 ? 'cheer' : ns === 1 ? 'happy' : 'oops', 110),
-        h('h2', null, ns === 3 ? '太棒了！三星通关！' : ns >= 1 ? '通关成功！' : '差一点点，再试试吧'),
-        h('div', { class: 'rstars' }, stars),
-        h('p', null, '答对 ' + score + ' / ' + N + ' 题' + (gain > 0 ? '，新得到 ' + gain + ' 颗星星' : '')),
-        h('div', { class: 'racts' },
-          h('button', { class: 'btn ghost', onclick: tap(function () { MZ.go('quiz', { id: L.id }, { replace: true }); }) }, icon('redo'), '再玩一次'),
-          h('button', { class: 'btn ghost', onclick: tap(function () { MZ.go('levels', {}, { replace: true }); }) }, '回到地图'),
-          ns >= 1 && nextL && MZ.levelUnlocked(nextL) ? h('button', { class: 'btn teal', onclick: tap(function () { MZ.go('quiz', { id: nextL.id }, { replace: true }); }) }, '下一关', icon('next')) : null)));
-      if (ns >= 1) { MZ.sfx.win(); MZ.confetti(ns === 3 ? 160 : 90); } else MZ.sfx.bad();
-      MZ.afterActivity();
-    }
-    return { node: node, after: showQ, leave: function () { done = true; window.removeEventListener('resize', onResize); } };
+    var L = MZ.levelById(p.id), qs = MZ.buildLevel(L);
+    return MZ.qrun({
+      qs: qs, color: L.color, title: '第 ' + L.id + ' 关 · ' + L.name, exitText: '退出后，这一关的成绩不会保存。',
+      onFinish: function (cx) {
+        var N = cx.N, score = cx.score, area = cx.area;
+        var s = S.get(), old = s.levels[L.id] || { stars: 0, best: 0 }, ns = MZ.starsFor(score, N), gain = Math.max(0, ns - old.stars);
+        s.levels[L.id] = { stars: Math.max(old.stars, ns), best: Math.max(old.best, score) };
+        s.stars += gain; S.save();
+        // 闯关也算复习：答错的字变成“迷糊字宝”，该复习的字答对了就升档
+        cx.results.forEach(function (r) { if (r && r.q.c) MZ.rev.grade(r.q.c, r.ok); });
+        var nextL = MZ.LEVELS.filter(function (l) { return l.prev === L.id; })[0];
+        var stars = [0, 1, 2].map(function (k) { return h('span', { class: 'rstar' + (k < ns ? ' on' : ''), style: { animationDelay: (0.35 + k * 0.35) + 's' } }, icon('star')); });
+        area.appendChild(h('div', { class: 'result' }, MZ.mascot(ns >= 2 ? 'cheer' : ns === 1 ? 'happy' : 'oops', 110),
+          h('h2', null, ns === 3 ? '太棒了！三星通关！' : ns >= 1 ? '通关成功！' : '差一点点，再试试吧'),
+          h('div', { class: 'rstars' }, stars),
+          h('p', null, '答对 ' + score + ' / ' + N + ' 题' + (gain > 0 ? '，新得到 ' + gain + ' 颗星星' : '')),
+          h('div', { class: 'racts' },
+            h('button', { class: 'btn ghost', onclick: tap(function () { MZ.go('quiz', { id: L.id }, { replace: true }); }) }, icon('redo'), '再玩一次'),
+            h('button', { class: 'btn ghost', onclick: tap(function () { MZ.go('levels', { bk: L.book }, { replace: true }); }) }, '回到地图'),
+            ns >= 1 && nextL && MZ.levelUnlocked(nextL) ? h('button', { class: 'btn teal', onclick: tap(function () { MZ.go('quiz', { id: nextL.id }, { replace: true }); }) }, '下一关', icon('next')) : null)));
+        if (ns >= 1) { MZ.sfx.win(); MZ.confetti(ns === 3 ? 160 : 90); } else MZ.sfx.bad();
+        MZ.afterActivity();
+      },
+    });
   };
 
   /* ================= 设置 / 关于 ================= */
@@ -727,7 +754,7 @@
 
   /* ---------- 启动 ---------- */
   MZ.start = function () {
-    S.get(); S.touchDay(); MZ.refreshChrome();
+    S.get(); S.touchDay(); MZ.rev.migrate(); MZ.refreshChrome();
     MZ.home();
   };
 })();
