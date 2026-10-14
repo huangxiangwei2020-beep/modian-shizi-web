@@ -26,7 +26,7 @@
   var CAP = 'M23 52 C20 24 38 8 60 8 C82 8 100 24 97 52 C93 42 88 35 82 31 C76 38 64 38 58 31 C52 39 38 37 32 31 C27 36 24 44 23 52Z';
   function stroke(d) { return ' stroke="' + d + '" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"'; }
   var HAIRS = AV.HAIRS = [
-    { id: 'b1', n: '清爽短发', g: 'b', back: function () { return ''; },
+    { id: 'b1', n: '短发', g: 'b', back: function () { return ''; },
       front: function (c, d, l) { return '<path d="M23 54 C19 24 38 7 61 8 C84 9 101 25 97 54 C95 44 92 38 87 34 C80 40 70 38 62 30 C58 36 50 40 40 40 C34 40 28 44 23 54Z" fill="' + c + '"' + stroke(d) + '/>' + hl(c, l); } },
     { id: 'b2', n: '小刺猬', g: 'b', back: function () { return ''; },
       front: function (c, d, l) { return '<path d="M23 54 C19 40 20 30 24 22 L30 28 L33 12 L42 20 L48 6 L56 17 L64 5 L70 17 L79 8 L82 20 L92 14 L93 28 L99 26 C101 36 99 46 97 54 C94 44 90 38 84 36 C76 42 66 38 60 32 C54 38 44 42 36 36 C30 40 25 46 23 54Z" fill="' + c + '"' + stroke(d) + '/>'; } },
