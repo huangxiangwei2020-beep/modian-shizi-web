@@ -23,7 +23,7 @@
         h('div', { class: 'gc-e' }, g.emoji),
         h('h3', null, g.name), h('p', null, g.desc),
         h('div', { class: 'gc-foot' },
-          h('span', { class: 'gc-tier' }, '推荐 ' + TIERS[gt.t - 1].emoji + TIERS[gt.t - 1].name),
+          h('span', { class: 'gc-tier' }, TIERS[gt.t - 1].emoji + TIERS[gt.t - 1].name),
           h('span', { class: 'gc-stars' }, [0, 1, 2].map(function (i) { return h('i', { class: i < bs ? 'on' : '' }, '★'); }))),
         n ? h('em', { class: 'gc-n' }, '玩过 ' + n + ' 局') : h('em', { class: 'gc-n new' }, '新游戏'));
     }));

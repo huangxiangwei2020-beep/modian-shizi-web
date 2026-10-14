@@ -137,7 +137,7 @@
         h('div', { class: 'grow' }), stats(),
         h('button', { class: 'icon-btn emo', 'aria-label': '给墨墨换装扮', onclick: tap(function () { MZ.go('shop'); }) }, h('span', null, '🎩')),
         h('button', { class: 'icon-btn', 'aria-label': '设置', onclick: tap(openSettings) }, icon('gear'))),
-      h('div', { class: 'hero', data: { bg: (s.wear && s.wear.bg) || 'sky' } },
+      h('div', { class: 'hero', style: { '--hg': MZ.AV.bgCss(s.wear && s.wear.bg) } },
         h('button', { class: 'hero-m', 'aria-label': '墨墨', onclick: function () { MZ.speak(say); MZ.sfx.tap(); } }, MZ.mascot(ready ? 'cheer' : cnt.due > 0 ? 'happy' : 'happy', 128)),
         h('div', { class: 'adv' },
           h('div', { class: 'adv-say' }, h('span', null, say), icon('speaker')),
@@ -147,7 +147,7 @@
       h('div', { class: 'cards3' },
         card3('c-coral', '字', '识字', '看笔顺 · 描红 · 认新字', ['已学 ' + learned + ' / ' + ALL + ' 字', bar(learned, ALL)], { name: 'learn' }),
         card3('c-sky', '⏰', '叫醒字宝宝', cnt.due > 0 ? cnt.due + ' 个字宝宝睡着啦' : (learned ? '字宝宝们都醒着' : '学了字才有字宝宝'), cnt.fuzzy > 0 ? ['迷糊字宝 ' + cnt.fuzzy + ' 个', bar(cnt.s3, Math.max(1, learned))] : ['牢记 ' + cnt.s3 + ' 个字', bar(cnt.s3, Math.max(1, learned))], { name: 'wake' }, cnt.due || 0),
-        card3('c-sun', '🎮', '小游戏', '6 种玩法 · 赢星星', ['已玩 ' + plays + ' 局', bar(Math.min(plays, 30), 30)], { name: 'games' })),
+        card3('c-sun', '🎮', '小游戏', MZ.GAMES.length + ' 种玩法 · 赢星星', ['已玩 ' + plays + ' 局', bar(Math.min(plays, 30), 30)], { name: 'games' })),
       h('div', { class: 'cards5' },
         card5('c-grape', '✍️', '听写', '听一听 写出来', { name: 'dictate' }),
         card5('c-teal', '📒', '字宝册', cnt.learned + ' / ' + ALL, { name: 'album' }),
@@ -178,7 +178,7 @@
       MZ.clear(strip);
       D.books.forEach(function (b, k) {
         var st = MZ.bookStat(k), nm = b.name.split(' · ');
-        strip.appendChild(h('button', { class: 'bk' + (k === bi ? ' on' : '') + (st.got === st.total ? ' full' : ''), onclick: tap(function () { bi = k; gi = firstOpenGroup(k); renderStrip(); renderSide(); renderMain(); }) },
+        strip.appendChild(h('button', { class: 'bk' + (k === bi ? ' on' : '') + (st.got === st.total ? ' full' : '') + (b.ext ? ' ext' : ''), onclick: tap(function () { bi = k; gi = firstOpenGroup(k); renderStrip(); renderSide(); renderMain(); }) },
           h('span', { class: 'bk-ic' }, b.icon), h('span', { class: 'bk-t' }, h('i', null, nm[0]), h('b', null, nm[1] || nm[0])), h('em', null, st.got + '/' + st.total), bar(st.got, st.total)));
       });
     }
@@ -197,6 +197,7 @@
       main.appendChild(h('div', { class: 'grp-head' }, h('h2', null, g.name), h('span', null, n + ' / ' + g.chars.length + ' 个字'),
         h('div', { class: 'grow' }),
         nextC ? h('button', { class: 'btn coral sm', onclick: tap(function () { MZ.go('char', { c: nextC, g: gi }); }) }, '学下一个：' + nextC, icon('next')) : h('span', { class: 'allgot' }, '这一组全学会啦 🎉')));
+      if (D.books[g.book].ext) main.appendChild(h('p', { class: 'xtip' }, '🌱 拓展字：不太常用，有兴趣再学～'));
       var grid = h('div', { class: 'tiles' });
       g.chars.forEach(function (c) {
         var ch = D.chars[c], done = !!s.learned[c], due = MZ.rev.isDue(c), fz = MZ.rev.isFuzzy(c);
@@ -291,6 +292,16 @@
           return h('button', { class: 'xchip link', onclick: tap(function () { MZ.go('char', { c: x, g: groupOf(x) }, { replace: true }); }) }, h('b', null, x), h('i', null, D.chars[x].p));
         })));
     }
+    if (MZ.hasDc(c)) {
+      var dps = MZ.partsOf(c);
+      chips.push(h('button', { class: 'chip link dcchip', onclick: tap(function () {
+        var card = function (p, k) { return h('div', { class: 'bd-part' }, h('b', null, p), h('i', null, MZ.SLOTN[ch.dk][k] + (MZ.partLabel(p) ? ' · ' + MZ.partLabel(p) : ''))); };
+        MZ.modal({ title: '拆一拆 · ' + MZ.KIND[ch.dk], wide: true,
+          body: h('div', { class: 'dcmodal' }, h('div', { class: 'bd-eq' }, card(dps[0], 0), h('span', { class: 'bd-op' }, '+'), card(dps[1], 1), h('span', { class: 'bd-op' }, '='), h('b', { class: 'bd-q done' }, c)),
+            h('p', null, '汉字是用零件拼出来的。' + (ch.dk === 'in' ? '这个字外面一个零件，里面一个零件。' : ch.dk === 'ud' ? '这个字上面一个零件，下面一个零件。' : '这个字左边一个零件，右边一个零件。'))),
+          buttons: [{ label: '🧩 去玩拼字工坊', kind: 'coral', onClick: function () { MZ.go('game', { id: 'build' }); } }, { label: '好的', kind: 'ghost' }] });
+      }) }, '拆 ' + dps[0] + '+' + dps[1]));
+    }
     var info = h('div', { class: 'info' }, h('div', { class: 'info-body' },
       h('div', { class: 'py-row' }, h('div', { class: 'bigpy' }, ch.p), speakBtn(c, 'big', true), h('div', { class: 'grow' }), ch.e ? h('div', { class: 'pic', 'aria-hidden': 'true' }, ch.e) : null),
       h('div', { class: 'chips' }, chips),
@@ -322,7 +333,7 @@
         try {
           writer = HanziWriter.create(hw, c, {
             width: size, height: size, padding: Math.round(size * 0.06),
-            charDataLoader: function (chr, onLoad, onErr) { var d = window.STROKES[chr]; d ? onLoad(d) : onErr(); },
+            charDataLoader: MZ.strokeLoader,
             strokeColor: '#2A2748', outlineColor: '#E3D6BA', drawingColor: '#FF7A59', highlightColor: '#2FB9A5',
             showOutline: true, showCharacter: true, strokeAnimationSpeed: 1.3, delayBetweenStrokes: 240, strokeFadeDuration: 280,
             drawingWidth: Math.round(size * 0.07),
@@ -643,10 +654,10 @@
     }));
     if (tab === 'lv') {
       var strip = h('nav', { class: 'bookstrip sm' });
-      var books = D.books.map(function (b, k) { return { k: k, icon: b.icon, t1: '第' + (k + 1) + '册', t2: b.name.split(' · ')[1] || b.name }; }).concat([{ k: 'sp', icon: '⭐', t1: '特别', t2: '特别关卡' }]);
+      var books = D.books.map(function (b, k) { return { k: k, icon: b.icon, t1: '第' + (k + 1) + '册', ext: !!b.ext, t2: b.name.split(' · ')[1] || b.name }; }).concat([{ k: 'sp', icon: '⭐', t1: '特别', t2: '特别关卡' }]);
       books.forEach(function (b) {
         var ls = levelsOf(b.k), n = ls.filter(passedL).length;
-        strip.appendChild(h('button', { class: 'bk' + (b.k === bk ? ' on' : ''), onclick: tap(function () { MZ.go('levels', { bk: b.k }, { replace: true }); }) },
+        strip.appendChild(h('button', { class: 'bk' + (b.k === bk ? ' on' : '') + (b.ext ? ' ext' : ''), onclick: tap(function () { MZ.go('levels', { bk: b.k }, { replace: true }); }) },
           h('span', { class: 'bk-ic' }, b.icon), h('span', { class: 'bk-t' }, h('i', null, b.t1), h('b', null, b.t2)), h('em', null, n + '/' + ls.length), bar(n, ls.length)));
       });
       var grid = h('div', { class: 'lvgrid' });
@@ -710,6 +721,45 @@
     });
   };
 
+  /* ================= 家长验证 & 护眼提醒 ================= */
+  // 做一道小朋友算不出来的乘法题，答对了才继续（用来保护“清空学习记录”这类不能反悔的操作）
+  MZ.parentGate = function (onOk) {
+    var a = 6 + Math.floor(Math.random() * 4), b = 6 + Math.floor(Math.random() * 4), ans = a * b;
+    var opts = [ans], guard = 0;
+    while (opts.length < 4 && guard++ < 50) { var w = ans + MZ.pick([-12, -10, -9, -8, -7, -6, -4, -3, -2, 2, 3, 4, 6, 7, 8, 9, 10, 12]); if (w > 0 && opts.indexOf(w) < 0) opts.push(w); }
+    opts = MZ.shuffle(opts);
+    var close = null;
+    var row = h('div', { class: 'pg-opts' }, opts.map(function (o) {
+      return h('button', { class: 'btn ghost pg-b', onclick: function () {
+        if (o === ans) { MZ.sfx.ok(); close && close(); onOk(); } else { MZ.sfx.bad(); MZ.toast('不对哦，请家长再算一算'); }
+      } }, String(o));
+    }));
+    close = MZ.modal({ title: '家长验证',
+      body: h('div', { class: 'pg' }, h('p', null, '这一步会影响学习记录，请家长来操作。'), h('div', { class: 'pg-q' }, a + ' × ' + b + ' = ?'), row),
+      buttons: [{ label: '取消', kind: 'ghost' }] });
+  };
+  // 护眼提醒：真正在玩（屏幕亮着、最近 2 分钟有触摸）累计满 20 分钟，在不打断游戏/答题的时候，轻轻提醒休息一下
+  (function () {
+    var acc = 0, lastTouch = Date.now(), pending = false, TICK = 15000, LIMIT = 20 * 60 * 1000;
+    function touched() { lastTouch = Date.now(); }
+    document.addEventListener('pointerdown', touched, true);
+    document.addEventListener('touchstart', touched, true);
+    function busy() { var n = MZ.current(); return n === 'game' || n === 'quiz' || n === 'wakeplay' || n === 'dictate' || document.getElementById('modal').classList.contains('on'); }
+    setInterval(function () {
+      var s = S.get();
+      if (document.hidden || Date.now() - lastTouch > 120000) { return; }
+      acc += TICK;
+      if (s.set.eye === false) { acc = 0; return; }
+      if (acc >= LIMIT) pending = true;
+      if (pending && !busy()) {
+        pending = false; acc = 0;
+        MZ.modal({ title: '让眼睛休息一下', body: h('div', { class: 'eye' }, MZ.mascot('happy', 90), h('p', null, '已经学了 20 分钟啦！抬起头，看看窗外远处的东西，数到 20，再回来继续玩。')),
+          buttons: [{ label: '好的，我去看看', kind: 'coral' }] });
+      }
+    }, TICK);
+    MZ._eye = { get: function () { return acc; }, set: function (v) { acc = v; lastTouch = Date.now(); }, tick: TICK };
+  })();
+
   /* ================= 设置 / 关于 ================= */
   function openSettings() {
     var s = S.get();
@@ -726,10 +776,13 @@
       return b;
     })));
     var body = h('div', { class: 'settings' },
-      toggle('声音（朗读和音效）', 'sound'), toggle('显示拼音', 'pinyin'), rateRow,
+      toggle('声音（朗读和音效）', 'sound'), toggle('显示拼音', 'pinyin'), toggle('护眼提醒（连续玩 20 分钟提醒休息）', 'eye'), rateRow,
       h('div', { class: 'srow' }, h('span', null, '开源声明'), h('button', { class: 'btn ghost sm', onclick: function () { MZ.sfx.tap(); document.getElementById('modal').classList.remove('on'); MZ.go('about'); } }, '查看')),
       h('div', { class: 'srow' }, h('span', null, '清空学习记录'), h('button', { class: 'btn danger sm', onclick: function () {
-        MZ.modal({ title: '确定要清空吗？', body: '星星、学会的字、奖章都会被清除，不能恢复。', buttons: [{ label: '不清空', kind: 'coral' }, { label: '确定清空', kind: 'danger', onClick: function () { S.reset(); MZ.toast('已清空，从头开始吧！'); MZ.home(); } }] });
+        MZ.sfx.tap(); document.getElementById('modal').classList.remove('on');
+        MZ.parentGate(function () {
+          MZ.modal({ title: '确定要清空吗？', body: '星星、学会的字、奖章、墨墨的装扮都会被清除，不能恢复。', buttons: [{ label: '不清空', kind: 'coral' }, { label: '确定清空', kind: 'danger', onClick: function () { S.reset(); MZ.toast('已清空，从头开始吧！'); MZ.home(); } }] });
+        });
       } }, '清空')));
     MZ.modal({ title: '设置', body: body, buttons: [{ label: '完成', kind: 'coral' }] });
   }
@@ -747,6 +800,8 @@
           h('h3', null, '开源组件'),
           h('p', null, '汉字笔顺动画与描红：Hanzi Writer（MIT 许可证，© 2014 David Chanin）。'),
           h('p', null, '汉字笔画数据：hanzi-writer-data，源自 Make Me a Hanzi 项目，使用 Arphic Public License（文泉驿/文鼎字体衍生数据）。以下为许可证原文，保持未改动：'),
+          h('p', null, '汉字拆分（“拆一拆”“拼字工坊”里把字拆成零件）：参考 CJK-DECOMP 项目的汉字拆分数据（Apache License 2.0，项目地址 github.com/amake/cjk-decomp），经本应用筛选、整理为小朋友看得懂的两个零件。许可证原文见下方，保持未改动：'),
+          h('pre', { class: 'lic' }, L.cjkdecomp || '（许可证原文见应用包内 licenses/CJK-DECOMP-LICENSE-APACHE-2.0.txt）'),
           h('pre', { class: 'lic' }, L.arphic || '（许可证原文见应用包内 licenses/ARPHICPL.TXT）'),
           h('pre', { class: 'lic' }, L.hanziwriter || '（许可证原文见应用包内 licenses/HANZI-WRITER-LICENSE-MIT.txt）'))));
     return { node: node };
@@ -756,5 +811,7 @@
   MZ.start = function () {
     S.get(); S.touchDay(); MZ.rev.migrate(); MZ.refreshChrome();
     MZ.home();
+    // 第一次打开（或老存档升级后第一次打开）：先请小朋友选自己的样子
+    if (!MZ.AV.has()) setTimeout(function () { MZ.AV.chooser(function () { MZ.refreshChrome(); if (MZ.refresh) MZ.refresh(); }); }, 450);
   };
 })();

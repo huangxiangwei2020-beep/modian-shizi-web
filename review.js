@@ -131,7 +131,7 @@
     var strip = h('nav', { class: 'bookstrip sm' });
     D.books.forEach(function (b, k) {
       var st = MZ.bookStat(k), nm = b.name.split(' · ');
-      strip.appendChild(h('button', { class: 'bk' + (k === bi ? ' on' : '') + (st.got === st.total ? ' full' : ''), onclick: tap(function () { s.book = k; S.save(); MZ.go('album', { b: k, f: flt }, { replace: true }); }) },
+      strip.appendChild(h('button', { class: 'bk' + (k === bi ? ' on' : '') + (st.got === st.total ? ' full' : '') + (b.ext ? ' ext' : ''), onclick: tap(function () { s.book = k; S.save(); MZ.go('album', { b: k, f: flt }, { replace: true }); }) },
         h('span', { class: 'bk-ic' }, b.icon), h('span', { class: 'bk-t' }, h('i', null, nm[0]), h('b', null, nm[1] || nm[0])), h('em', null, st.got + '/' + st.total), bar(st.got, st.total)));
     });
     var filters = h('div', { class: 'cats' }, FILTERS.map(function (f) {
@@ -163,7 +163,7 @@
   };
 
   /* ================= 听写练习 ================= */
-  function strokeLoader(chr, onLoad, onErr) { var d = window.STROKES[chr]; d ? onLoad(d) : onErr(); }
+  var strokeLoader = MZ.strokeLoader;
   V.dictate = function () {
     var s = S.get(), pool = D.order.filter(function (c) { return s.learned[c]; });
     if (!pool.length) {
@@ -279,60 +279,82 @@
   };
 
   /* ================= 装扮商店 ================= */
+  var NONE_LABEL = { hat: '不戴帽子', hair: '不戴发饰', face: '不戴', top: '原来的衣服', bottom: '原来的裤子', shoes: '原来的鞋', neck: '不戴', back: '不背', hand: '空着手', pet: '不带', bg: '默认背景' };
+  var HEAD_SLOTS = { hat: 1, hair: 1, face: 1, neck: 1 };
   V.shop = function (p) {
-    var s = S.get(), slot = p.slot || 'hat';
-    var view = { hat: s.wear.hat || '', face: s.wear.face || '', neck: s.wear.neck || '', bg: s.wear.bg || '' };
+    var AV = MZ.AV, slot = p.slot || 'look';
+    var tryOn = {};                    // 还没买、只是试穿的
     var prev = h('div', { class: 'shop-prev' }), act = h('div', { class: 'shop-act' }), grid = h('div', { class: 'items' });
     var wallet = h('div', { class: 'shop-wallet' });
-    var sel = null;   // 正在看的那件
+    var sel = null;                    // 正在看的那件
+    function viewWear() { return Object.assign({}, S.get().wear, tryOn); }
     function renderPrev() {
       MZ.clear(prev);
-      prev.setAttribute('data-bg', view.bg || 'sky');
-      prev.appendChild(MZ.mascot('cheer', 190, { hat: view.hat, face: view.face, neck: view.neck }));
+      var w = viewWear();
+      prev.style.setProperty('--hg', AV.bgCss(w.bg));
+      prev.appendChild(MZ.mascot('happy', 190, { wear: w }));
       MZ.clear(wallet);
       wallet.appendChild(h('span', { class: 'pill star' }, icon('star'), h('b', null, String(S.wallet()))));
       wallet.appendChild(h('span', { class: 'wl-t' }, '我的星星'));
     }
     function renderAct() {
       MZ.clear(act);
-      if (!sel) { act.appendChild(h('p', { class: 'tip' }, '点一件装扮，就能给墨墨试穿。星星是玩游戏、闯关、开宝箱得来的。')); return; }
+      if (slot === 'look') { act.appendChild(h('p', { class: 'tip' }, '选好自己的样子吧：小男孩还是小女孩、肤色、发型、发色、眼睛颜色，随时都能改，不要星星。游戏里跑来跑去的就是你！')); return; }
+      if (!sel) { act.appendChild(h('p', { class: 'tip' }, '点一件装扮，就能试穿。星星是玩游戏、闯关、开宝箱得来的。')); return; }
       var it = MZ.ITEM[sel], owned = MZ.shop.owned(sel), worn = S.get().wear[it.slot] === sel;
-      act.appendChild(h('div', { class: 'sa-name' }, h('span', null, it.emoji), h('b', null, it.name)));
+      act.appendChild(h('div', { class: 'sa-name' }, h('b', null, it.name)));
       if (owned) {
-        act.appendChild(h('p', { class: 'tip' }, worn ? '墨墨正穿着它呢。' : '已经拥有啦。'));
-        act.appendChild(h('button', { class: 'btn ' + (worn ? 'ghost' : 'coral'), onclick: tap(function () { var on = !worn; MZ.shop.wear(it.slot, on ? sel : ''); view[it.slot] = on ? sel : ''; refresh(); }) }, worn ? '摘下来' : '戴上'));
+        act.appendChild(h('p', { class: 'tip' }, worn ? '正穿着它呢。' : '已经拥有啦。'));
+        act.appendChild(h('button', { class: 'btn ' + (worn ? 'ghost' : 'coral'), onclick: tap(function () { var on = !worn; MZ.shop.wear(it.slot, on ? sel : ''); delete tryOn[it.slot]; refresh(); }) }, worn ? '脱下来' : '穿上'));
       } else {
         var poor = S.wallet() < it.price;
         act.appendChild(h('p', { class: 'tip' }, poor ? '星星还差 ' + (it.price - S.wallet()) + ' 颗，继续玩游戏攒星星吧！' : '要用 ' + it.price + ' 颗星星买下它吗？'));
         act.appendChild(h('button', { class: 'btn ' + (poor ? 'ghost' : 'coral'), disabled: poor, onclick: tap(function () {
           MZ.modal({ title: '买下“' + it.name + '”？', body: '会用掉 ' + it.price + ' 颗星星。', buttons: [{ label: '再想想', kind: 'ghost' }, { label: '买下', kind: 'coral', onClick: function () {
             var r = MZ.shop.buy(sel);
-            if (r === 'ok') { MZ.sfx.coin(); MZ.confetti(70); MZ.shop.wear(it.slot, sel); view[it.slot] = sel; MZ.toast('买到啦！墨墨戴上了～'); MZ.afterActivity(); refresh(); }
+            if (r === 'ok') { MZ.sfx.coin(); MZ.confetti(70); MZ.shop.wear(it.slot, sel); delete tryOn[it.slot]; MZ.toast('买到啦！已经穿上了～'); MZ.afterActivity(); refresh(); }
             else MZ.toast(r === 'poor' ? '星星不够哦' : '已经有啦');
           } }] });
         }) }, '⭐ ' + it.price + ' 买下'));
       }
     }
+    function mini(it) {
+      var w = {}; if (it) w[it.slot] = it.id;
+      var head = !!HEAD_SLOTS[slot];
+      var box = h('span', { class: 'ipv' }, MZ.mascot('happy', head ? 82 : 78, { bare: true, wear: w, still: true, view: head ? 'head' : null, noPet: false }));
+      if (slot === 'bg') box.style.background = AV.bgCss(it && it.id);
+      return box;
+    }
     function renderGrid() {
       MZ.clear(grid);
-      grid.appendChild(h('button', { class: 'item none' + (!view[slot] ? ' on' : ''), onclick: tap(function () { MZ.shop.wear(slot, ''); view[slot] = ''; sel = null; refresh(); }) }, h('span', { class: 'ie' }, '🚫'), h('b', null, '不戴'), h('i', null, '')));
+      var cur = viewWear()[slot];
+      grid.appendChild(h('button', { class: 'item none' + (!cur ? ' on' : ''), onclick: tap(function () { MZ.shop.wear(slot, ''); delete tryOn[slot]; sel = null; refresh(); }) }, mini(null), h('b', null, NONE_LABEL[slot] || '不要'), h('i', null, '')));
       MZ.ITEMS.filter(function (it) { return it.slot === slot; }).forEach(function (it) {
         var owned = MZ.shop.owned(it.id), worn = S.get().wear[slot] === it.id;
-        grid.appendChild(h('button', { class: 'item' + (owned ? ' own' : '') + (view[slot] === it.id ? ' on' : '') + (sel === it.id ? ' sel' : ''), onclick: tap(function () {
+        grid.appendChild(h('button', { class: 'item' + (owned ? ' own' : '') + (cur === it.id ? ' on' : '') + (sel === it.id ? ' sel' : ''), onclick: tap(function () {
           sel = it.id;
-          if (owned) { MZ.shop.wear(slot, it.id); view[slot] = it.id; }
-          else view[slot] = it.id;       // 没买的只是试穿，不保存
+          if (owned) { MZ.shop.wear(slot, it.id); delete tryOn[slot]; }
+          else tryOn[slot] = it.id;       // 没买的只是试穿，不保存
           refresh();
-        }) }, h('span', { class: 'ie' }, it.emoji), h('b', null, it.name), h('i', null, owned ? (worn ? '穿戴中' : '已拥有') : '⭐ ' + it.price)));
+        }) }, mini(it), h('b', null, it.name), h('i', null, owned ? (worn ? '穿戴中' : '已拥有') : '⭐ ' + it.price)));
       });
     }
-    function refresh() { renderPrev(); renderAct(); renderGrid(); MZ.refreshChrome(); }
+    var lookBox = null;
+    function refresh() {
+      renderPrev(); renderAct();
+      if (slot !== 'look') renderGrid();
+      MZ.refreshChrome();
+    }
     var tabs = MZ.SLOTS.map(function (sl) { return { k: sl.k, label: sl.label }; });
     var tabBar = ui.seg(tabs, slot, function (k) { MZ.go('shop', { slot: k }, { replace: true }); });
+    tabBar.classList.add('sm', 'wrap');
+    var content;
+    if (slot === 'look') { lookBox = AV.editor(function () { if (prev.firstChild || true) { renderPrev(); } }); lookBox.classList.add('av-look'); content = lookBox; }
+    else content = h('div', { class: 'pin-scroll' }, grid);
     var node = h('section', { class: 'screen shop th-sun' }, topbar({ title: '给墨墨换装扮' }),
       h('div', { class: 'shop-body' },
         h('div', { class: 'shop-left' }, prev, wallet, act),
-        h('div', { class: 'shop-right' }, tabBar, h('div', { class: 'pin-scroll' }, grid))));
+        h('div', { class: 'shop-right' }, tabBar, content)));
     refresh();
     return { node: node };
   };

@@ -270,7 +270,7 @@
       function makePlan() {
         var s = S.get(), kBask = tier === 1 ? 2 : 3, mode = 'group';
         if (tier === 3) {
-          var withR = D.order.filter(function (c) { return D.chars[c].r != null; });
+          var withR = MZ.core.filter(function (c) { return D.chars[c].r != null; });
           var byR = {}; withR.forEach(function (c) { (byR[D.chars[c].r] = byR[D.chars[c].r] || []).push(c); });
           var rIdx = Object.keys(byR).filter(function (k) { return byR[k].length >= 4; });
           mode = (rIdx.length >= 3 && Math.random() < 0.4) ? 'radical' : 'tone';
@@ -282,7 +282,7 @@
           var tones = [1, 2, 3, 4], per2 = Math.ceil(N / 4), its2 = [];
           tones.forEach(function (t, bi) {
             var cs = ctx.pool.filter(function (c) { return MZ.toneOf(D.chars[c].p) === t; });
-            if (cs.length < per2) cs = cs.concat(D.order.filter(function (c) { return MZ.toneOf(D.chars[c].p) === t && cs.indexOf(c) < 0; }).slice(0, per2));
+            if (cs.length < per2) cs = cs.concat(MZ.core.filter(function (c) { return MZ.toneOf(D.chars[c].p) === t && cs.indexOf(c) < 0; }).slice(0, per2));
             MZ.pickN(cs, Math.min(per2, cs.length)).forEach(function (c) { its2.push({ c: c, b: bi }); });
           });
           return { title: '按声调分一分（点字旁边的喇叭可以听）', tone: true, items: shuffle(its2).slice(0, N),
@@ -352,7 +352,7 @@
       var targets = ctx.pick(N, tier >= 2 ? { need: function (c) { return !!D.chars[c].sim; } } : null);
       var havSim = targets.filter(function (c) { return D.chars[c].sim; }).length;
       if (tier >= 2 && havSim < N) {          // 学过的字里长得像的不够，从全部字里补
-        var more = MZ.pickN(D.order.filter(function (c) { return D.chars[c].sim && targets.indexOf(c) < 0; }), N - targets.length);
+        var more = MZ.pickN(MZ.core.filter(function (c) { return D.chars[c].sim && targets.indexOf(c) < 0; }), N - targets.length);
         targets = targets.concat(more).slice(0, N);
       }
       ctx.setSegs(N);
@@ -366,7 +366,7 @@
           if (tier === 3) { var close = sims.filter(function (x) { return Math.abs(D.chars[x].n - n) <= 1; }); if (close.length) sims = close; }
           return pick(sims);
         }
-        var far = D.order.filter(function (x) { return x !== c && Math.abs(D.chars[x].n - n) >= 3; });
+        var far = MZ.core.filter(function (x) { return x !== c && Math.abs(D.chars[x].n - n) >= 3; });
         return pick(far);
       }
       function round() {

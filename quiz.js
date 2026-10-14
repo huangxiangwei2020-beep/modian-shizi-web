@@ -52,6 +52,20 @@
   });
   add(nid++, '古诗岛', 'poem', { color: 'grape', special: true, book: 'sp', need: 4 });
   add(nid++, '总复习', 'mix', { color: 'teal', special: true, book: 'sp', minLearned: 10 });
+  // 第 8~32 册：每册 6 关，按分组切成差不多大的 6 段（每关三十多个字）。第 25 册起是不常用的“拓展字”。
+  var SUFFIX = ['小径', '石桥', '小屋', '树洞', '高台', '宝藏'];
+  D.books.forEach(function (b, bi) {
+    if (bi < 7) return;
+    var gs = b.groups, total = 0, parts = [], cur = [], acc = 0, theme = b.name.split(' · ')[1] || b.name;
+    gs.forEach(function (g) { total += D.groups[g].chars.length; });
+    var per = total / SUFFIX.length, target = per;
+    gs.forEach(function (g) {
+      cur.push(g); acc += D.groups[g].chars.length;
+      if (acc >= target - 2 && parts.length < SUFFIX.length - 1) { parts.push(cur); cur = []; target += per; }
+    });
+    if (cur.length) parts.push(cur);
+    parts.forEach(function (gl, j) { add(nid, theme + SUFFIX[j], 'chars', { groups: gl, book: bi, prev: j === 0 ? 0 : nid - 1, ext: !!b.ext }); nid++; });
+  });
   MZ.LEVELS = LV;
   MZ.levelById = function (id) { for (var i = 0; i < LV.length; i++) if (LV[i].id === id) return LV[i]; return null; };
   MZ.levelHint = function (L) {
@@ -85,7 +99,7 @@
     for (var i = 0; i < list.length && out.length < n; i++) { if (!seen[list[i]]) { seen[list[i]] = 1; out.push(list[i]); } }
     return out;
   }
-  function allChars() { return D.order; }
+  function allChars() { return MZ.core; }
   function pyWrongs(py, c, pool) {
     var pp = MZ.parsePy(py), res = [];
     if (pp.tone) {
@@ -264,7 +278,7 @@
       var ini = shuffle(D.pinyin.initials).slice(0, 3), fin = shuffle(FIN).slice(0, 2), sp = shuffle(D.pinyin.spell);
       qs = [qInitial(ini[0]), qFinal(fin[0]), qSpell(sp[0]), qInitial(ini[1]), qSpell(sp[1]), qFinal(fin[1]), qToneP(sp[2]), qInitial(ini[2])];
     } else if (L.kind === 'radical') {
-      var inset = D.order.filter(function (c) { return D.chars[c].r != null; });
+      var inset = MZ.core.filter(function (c) { return D.chars[c].r != null; });
       var cs = shuffle(inset).slice(0, 3), rs = shuffle(D.radicals.map(function (_, k) { return k; }));
       qs = [qRadical(cs[0]), qRadName(rs[0]), qRadMeaning(rs[1]), qRadical(cs[1]), qRadName(rs[2]), qRadMeaning(rs[3]), qRadical(cs[2]), qRadName(rs[4])];
     } else if (L.kind === 'idiom') {

@@ -9,6 +9,59 @@
     g.chars.forEach(function (c) { GI[c] = gi; POSOF[c] = g.pos || g.name; BOOKOF[c] = g.book; });
   });
   MZ.groupOf = function (c) { return GI[c] == null ? 0 : GI[c]; };
+  // 常用字（前 24 册）。小游戏里的“所有汉字”、干扰选项等只在这些字里找；后面的“拓展字”比较生僻，只在学到那里时才会遇到
+  MZ.core = D.order.filter(function (c) { var b = D.books[BOOKOF[c]]; return !(b && b.ext); });
+  /* 偏旁零件：D.chars[c].dc = 两个零件（左/右、上/下、外/内），dk = 结构 lr | ud | in */
+  var PN = { '阝': '耳刀旁', '饣': '食字旁', '刂': '立刀旁', '彳': '双人旁', '礻': '示字旁', '罒': '四字头', '彡': '三撇', '亠': '京字头', '丷': '两点头', '冖': '秃宝盖', '夂': '折文' };
+  D.radicals.forEach(function (R) { if (!PN[R.f]) PN[R.f] = R.n; });
+  MZ.KIND = { lr: '左右结构', ud: '上下结构', 'in': '包围结构' };
+  MZ.SLOTN = { lr: ['左', '右'], ud: ['上', '下'], 'in': ['外', '内'] };
+  MZ.hasDc = function (c) { var x = D.chars[c]; return !!(x && x.dc && x.dc.length === 2); };
+  MZ.partsOf = function (c) { return MZ.hasDc(c) ? [D.chars[c].dc.charAt(0), D.chars[c].dc.charAt(1)] : null; };
+  MZ.partLabel = function (p) { return PN[p] || (D.chars[p] ? D.chars[p].p : ''); };
+  MZ.DCCORE = MZ.core.filter(MZ.hasDc);
+  // 常见零件表：出现 3 次以上，按出现次数从多到少
+  (function () {
+    var cnt = {};
+    MZ.DCCORE.forEach(function (c) { MZ.partsOf(c).forEach(function (p) { cnt[p] = (cnt[p] || 0) + 1; }); });
+    MZ.PARTS = Object.keys(cnt).filter(function (p) { return cnt[p] >= 3; }).sort(function (a, b) { return cnt[b] - cnt[a]; });
+  })();
+
+  /* ---------- 笔顺数据：按册分片，用到哪一册才加载哪一册 ---------- */
+  var shardState = {};          // 册序号 -> 0 加载中 / 1 已就绪 / -1 失败
+  var shardWait = {};
+  window.STROKES = window.STROKES || {};
+  MZ.shardOf = function (c) { var gi = GI[c]; return gi == null ? -1 : D.groups[gi].book; };
+  MZ.loadShard = function (bk, cb) {
+    cb = cb || function () {};
+    if (bk < 0) return cb(false);
+    if (shardState[bk] === 1) return cb(true);
+    if (shardState[bk] === -1) return cb(false);
+    (shardWait[bk] = shardWait[bk] || []).push(cb);
+    if (shardState[bk] === 0) return;
+    shardState[bk] = 0;
+    var sc = document.createElement('script');
+    var done = function (ok) {
+      shardState[bk] = ok ? 1 : -1;
+      var ws = shardWait[bk] || []; shardWait[bk] = [];
+      ws.forEach(function (f) { try { f(ok); } catch (e) { /* ignore */ } });
+      if (!ok) setTimeout(function () { if (shardState[bk] === -1) shardState[bk] = undefined; }, 4000);   // 失败后过几秒允许重试
+    };
+    sc.onload = function () { done(true); };
+    sc.onerror = function () { if (sc.parentNode) sc.parentNode.removeChild(sc); done(false); };
+    sc.src = 'strokes/s' + (bk + 1 < 10 ? '0' : '') + (bk + 1) + '.js';
+    document.head.appendChild(sc);
+  };
+  // 取某个字的笔顺数据；回调 (数据 或 null)
+  MZ.loadStrokes = function (c, cb) {
+    var d = window.STROKES[c];
+    if (d) return cb(d);
+    MZ.loadShard(MZ.shardOf(c), function () { cb(window.STROKES[c] || null); });
+  };
+  // 提前把一整册读进来（进入某一组的时候调用），不等回调
+  MZ.warmStrokes = function (c) { MZ.loadShard(MZ.shardOf(c)); };
+  // 给 hanzi-writer 用的加载函数
+  MZ.strokeLoader = function (chr, onLoad, onErr) { MZ.loadStrokes(chr, function (d) { d ? onLoad(d) : onErr(); }); };
   MZ.bookStat = function (bi) {
     var s = S.get(), b = D.books[bi], total = 0, got = 0;
     b.groups.forEach(function (g) { D.groups[g].chars.forEach(function (c) { total++; if (s.learned[c]) got++; }); });
@@ -129,7 +182,7 @@
   MZ.pool = function (scope, minN) {
     var s = S.get(), learned = D.order.filter(function (c) { return s.learned[c]; }), list, borrowed = [], ex = {};
     minN = minN || 8;
-    if (scope === 'all') list = D.order.slice();
+    if (scope === 'all') list = MZ.core.slice();
     else if (scope === 'fuzzy') list = learned.filter(function (c) { return s.rev[c] && s.rev[c].w; });
     else list = learned.slice();
     list.forEach(function (c) { ex[c] = 1; });
@@ -178,7 +231,7 @@
   // bad：构建时算好的“换成它也成词/成句”的字，永远不选
   MZ.distract = function (c, n, o) {
     o = o || {};
-    var pool = o.pool || D.order, no = {}, out = [], ch = D.chars[c], plain = MZ.parsePy(ch.p).plain;
+    var pool = o.pool || MZ.core, no = {}, out = [], ch = D.chars[c], plain = MZ.parsePy(ch.p).plain;
     no[c] = 1;
     (o.bad || '').split('').forEach(function (x) { no[x] = 1; });
     (o.not || []).forEach(function (x) { no[x] = 1; });
@@ -198,7 +251,7 @@
     }
     if (o.sim && ch.sim) add(ch.sim.split(''), true, o.simN || n);
     if (o.hom && ch.hom) add(ch.hom.split(''), false, o.homN || 1);
-    add(pool, true); add(D.order, true); add(pool, false); add(D.order, false);
+    add(pool, true); add(MZ.core, true); add(pool, false); add(MZ.core, false);
     return out;
   };
 
@@ -269,8 +322,8 @@
     },
     wear: function (slot, id) {
       var s = S.get();
-      if (!s.wear) s.wear = { hat: '', face: '', neck: '', bg: '' };
-      if (id && !s.own[id]) return false;
+      if (!s.wear) s.wear = {};
+      if (id && (!s.own[id] || !MZ.ITEM[id] || MZ.ITEM[id].slot !== slot)) return false;
       s.wear[slot] = id || '';
       S.save();
       return true;
